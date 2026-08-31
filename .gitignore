@@ -1,0 +1,36 @@
+# Xcode
+*.xcodeproj/xcuserdata/
+*.xcworkspace/xcuserdata/
+*.xcuserstate
+*.xcscmblueprint
+*.xccheckout
+DerivedData/
+!DerivedData/.gitkeep
+
+# Build artifacts
+build/
+.build/
+*.app/
+*.dylib
+*.so
+*.framework
+
+# Swift Package Manager
+.swiftpm/
+Package.resolved
+!.swiftpm/Package.swift
+
+# macOS
+.DS_Store
+*.log
+
+# XcodeGen
+*.xcodeproj/
+
+# IDE
+.idea/
+.vscode/
+
+# Temporary
+*.tmp
+*.bak
