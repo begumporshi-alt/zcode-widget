@@ -66,6 +66,12 @@ struct ContentView: View {
                         Label("Plugins", systemImage: "puzzlepiece.extension.fill")
                     }
                     .tag(2)
+
+                ProvidersView()
+                    .tabItem {
+                        Label("Providers", systemImage: "server.rack")
+                    }
+                    .tag(3)
             }
             .tabViewStyle(.automatic)
         }
