@@ -6,12 +6,16 @@ A floating macOS dashboard panel for ZCode: token usage stats, searchable skill/
 
 ## Features
 
-- **Floating always-on-top panel** (~360×520pt) that lives in the macOS menu bar
-- **Tokens tab** — token usage stats from `~/.zcode/cli/db/db.sqlite`, 7-day bar chart, recent turns list
+- **Floating always-on-top panel** (440×560pt) that lives in the macOS menu bar, with a scrollable sidebar (7 sections) — ⌘1…⌘7 jump straight to a section
+- **Tokens tab** — token usage stats from `~/.zcode/cli/db/db.sqlite`, 7-day bar chart, usage streak, recent turns list
 - **Skills tab** — searchable picker of `~/.zcode/skills/` with copy-to-clipboard for slash commands
 - **Plugins tab** — searchable picker with copy-to-clipboard
 - **Providers tab** — visual editor for ZCode's custom model providers (`~/.zcode/v2/config.json`): add/edit/delete providers and models, custom headers, and a one-tap fix for gateways that return empty responses
-- **Menu bar Z icon** — left-click toggles panel, right-click shows menu
+- **Report tab** — one-tap weekly shareable summary card (copy as 2× PNG) plus a 119-day activity heatmap
+- **Prompts tab** — LLM-powered prompt enhancer (uses your configured ZCode providers) and a prompt library with curated built-ins plus your own saved prompts
+- **Database tab** — per-project database dashboard: auto-discovers the projects you work on in ZCode, then inventories each project's migrations, tables & columns (with RLS badges), row-level security policies, functions, triggers, connection hints (key names only — values are never read), and architecture/blueprint notes from ZCode memories + in-repo docs
+- **Menu bar glance** — the Z icon shows today's token usage, turning red when you pass your daily budget (set in Settings); left-click toggles the panel, right-click shows a menu
+- **Activity ticker** — live strip at the bottom showing the latest model calls as they land
 - **Live updates** via FSEvents watcher on `~/.zcode/log/token-tail.jsonl`
 
 ## Installation
@@ -56,12 +60,14 @@ open build/Build/Products/Release/ZCodeWidget.app
 | Action | How |
 |---|---|
 | Toggle panel | Click the **Z** icon in the menu bar (left-click), or run `zcode-widget` |
+| Jump to a section | Click a sidebar item, or press **⌘1…⌘7** (Tokens…Database) |
 | Open menu | Right-click the **Z** icon → Show / Hide / Quit |
-| Hide panel | Click **−** in the header |
-| Close panel | Click **×** in the header (reopens via Z icon) |
+| Hide panel | Click **−** in the footer |
 | Copy slash command | Tap a skill/plugin in its tab |
 | Edit model providers | **Providers** tab → tap a provider, or **+** to add one |
-| Move panel | Drag anywhere on the panel |
+| Set daily budget | Gear icon in the footer → Settings |
+| Track a project's database | **Database** tab → **+** to add any folder |
+| Move panel | Drag anywhere on the panel (position is remembered) |
 
 ### The Providers tab
 
@@ -73,6 +79,18 @@ Manages the same provider registry as ZCode's Settings (`~/.zcode/v2/config.json
 
 Safety: every save creates a timestamped backup (`config.json.bak-widget-*`, newest 10 kept), writes are atomic, and the widget warns if the ZCode IDE is running (quit ZCode before editing — it rewrites the config on exit).
 
+### The Database tab
+
+Shows every project you've worked on in ZCode (from `session` history, most recent first — plus any folders you add with **+**). Each project gets a read-only inventory parsed from its migration/schema SQL (`supabase/migrations/**`, `migrations/**`, `sql/**`, `schema.sql`):
+
+- **Tables & Schema** — every table with its columns and types; tables with row-level security show an **RLS** badge; expand any table to browse its schema
+- **RLS Policies** — each policy with its table, command and roles
+- **Functions & Triggers** — parsed names with signatures (`returns …` / `BEFORE … ON …`)
+- **Connections** — which connection keys a project's `.env`/`config.toml`/`docker-compose` declares (e.g. Supabase URL, service-role key, direct DB URL). **Only key names are matched — values are never read, displayed, or stored.**
+- **Blueprints & Docs** — architecture/blueprint notes ZCode kept for the project (memory files) plus `ARCHITECTURE.md`/`docs/**` inside the repo, with one-line summaries
+
+SQL parsing is comment- and string-aware, deduplicates re-imported migration files and objects, and caps the work per project so it stays instant even on large repos.
+
 ## Project structure
 
 ```
@@ -83,22 +101,35 @@ zcode-widget/
 ├── Resources/
 │   └── Info.plist            # LSUIElement=true, bundle id com.zcode.widget
 ├── Sources/ZCodeWidget/
-│   ├── ZCodeWidgetApp.swift  # App entry + AppDelegate (status bar, panel)
+│   ├── ZCodeWidgetApp.swift  # App entry + AppDelegate (status bar glance, menus, panel)
 │   ├── Data/
-│   │   ├── Database.swift    # GRDB DatabaseQueue (~/.zcode/cli/db/db.sqlite, readonly)
-│   │   ├── Models.swift      # GRDB FetchableRecord structs
-│   │   ├── TokenTailWatcher.swift    # FSEvents + polling watcher for live updates
-│   │   ├── TokenUsageRepository.swift # Query helpers (totals, daily, recent turns)
-│   │   └── ProviderConfigStore.swift # Read/write ~/.zcode/v2/config.json (surgical, backups)
+│   │   ├── AppState.swift          # Shared selected-section state
+│   │   ├── Database.swift          # GRDB DatabaseQueue (~/.zcode/cli/db/db.sqlite, readonly)
+│   │   ├── Models.swift            # GRDB FetchableRecord structs
+│   │   ├── TokenTailWatcher.swift  # FSEvents + polling watcher for live updates
+│   │   ├── TokenUsageRepository.swift  # Query helpers (totals, daily, recent turns)
+│   │   ├── ProviderConfigStore.swift  # Read/write ~/.zcode/v2/config.json (surgical, backups)
+│   │   ├── PromptEnhancer.swift    # LLM enhance calls through configured providers
+│   │   ├── PromptLibraryStore.swift # Prompt library (~/.zcode/prompts.json)
+│   │   ├── WidgetSettingsStore.swift # Daily budget + pinned folders (~/.zcode/widget-settings.json)
+│   │   └── ActivityTicker.swift    # Latest-call ticker state
+│   ├── Database/
+│   │   ├── ProjectDbScanner.swift  # Discovers projects + parses SQL → tables/policies/functions/triggers
+│   │   └── ProjectDbModels.swift   # Inventory structs
 │   ├── Discovery/
 │   │   ├── SkillScanner.swift   # Scans ~/.zcode/skills/ for SKILL.md
 │   │   └── PluginScanner.swift  # Reads installed_plugins.json + config.json
 │   ├── UI/
-│   │   ├── ContentView.swift    # Header + TabView (Tokens / Skills / Plugins / Providers)
-│   │   ├── TokensView.swift     # Stats cards + chart + turn list
+│   │   ├── ContentView.swift    # Sidebar + section switcher (7 sections)
+│   │   ├── TokensView.swift     # Stats cards + chart + streak + turn list
 │   │   ├── SkillsView.swift     # Searchable skill picker + copy slash command
 │   │   ├── PluginsView.swift    # Searchable plugin picker + copy slash command
 │   │   ├── ProvidersView.swift  # Provider list + editors (provider, model)
+│   │   ├── ReportView.swift     # Weekly shareable card + heatmap
+│   │   ├── PromptsView.swift    # Prompt enhancer + library
+│   │   ├── DatabaseView.swift   # Per-project database dashboard
+│   │   ├── SettingsView.swift   # Settings sheet (daily budget)
+│   │   ├── ActivityTickerBar.swift  # Live bottom ticker strip
 │   │   └── ToastView.swift      # Copy-to-clipboard feedback toast
 │   └── Window/
 │       └── FloatingPanelController.swift  # KeyablePanel (typing-capable borderless panel)

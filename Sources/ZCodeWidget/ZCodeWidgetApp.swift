@@ -21,7 +21,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         // 1. Hidden main menu — an accessory app has no menu bar, so without an
         // Edit menu AppKit never delivers Cmd+C/V/X/A/Z to text fields, and the
-        // View menu below powers the ⌘1…⌘6 section shortcuts.
+        // View menu below powers the ⌘1…⌘7 section shortcuts.
         setupMainMenu()
 
         // 2. Register status bar item FIRST so it survives even if window is closed
@@ -69,7 +69,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         editMenu.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
         editMenuItem.submenu = editMenu
 
-        // View menu: ⌘1…⌘6 switch sections (shows the panel if hidden)
+        // View menu: ⌘1…⌘7 switch sections (shows the panel if hidden)
         let viewMenuItem = NSMenuItem()
         mainMenu.addItem(viewMenuItem)
         let viewMenu = NSMenu(title: "View")

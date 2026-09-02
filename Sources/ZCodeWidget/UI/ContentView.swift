@@ -2,7 +2,7 @@ import SwiftUI
 import AppKit
 
 enum SidebarTab: Int, CaseIterable, Identifiable {
-    case tokens, skills, plugins, providers, report, prompts
+    case tokens, skills, plugins, providers, report, prompts, database
 
     var id: Int { rawValue }
 
@@ -14,6 +14,7 @@ enum SidebarTab: Int, CaseIterable, Identifiable {
         case .providers: "Providers"
         case .report: "Report"
         case .prompts: "Prompts"
+        case .database: "Database"
         }
     }
 
@@ -25,6 +26,7 @@ enum SidebarTab: Int, CaseIterable, Identifiable {
         case .providers: "server.rack"
         case .report: "square.and.arrow.up"
         case .prompts: "text.quote"
+        case .database: "cylinder.split.1x2"
         }
     }
 }
@@ -173,6 +175,7 @@ struct ContentView: View {
             case .providers: ProvidersView()
             case .report: ReportView()
             case .prompts: PromptsView()
+            case .database: DatabaseView()
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

@@ -43,16 +43,21 @@ class FloatingPanelController: NSWindowController, NSWindowDelegate {
 
     private func configureWindow() {
         guard let win = window else { return }
-        // Restore the saved position so the panel stays where the user put it;
+        // Restore the saved position so the panel stays where the user put it,
+        // clamped so the whole frame stays on-screen (a saved origin from an
+        // earlier display layout can otherwise put the panel out of reach);
         // fall back to centering on first launch.
         if let saved = UserDefaults.standard.string(forKey: Self.originKey) {
             let parts = saved.split(separator: ",")
             if parts.count == 2,
                let x = Double(parts[0]), let y = Double(parts[1]),
                let screen = NSScreen.main {
-                let point = NSPoint(x: x, y: y)
-                if screen.visibleFrame.insetBy(dx: -80, dy: -80).contains(point) {
-                    win.setFrameOrigin(point)
+                let size = win.frame.size
+                let visible = screen.visibleFrame
+                if size.width <= visible.width, size.height <= visible.height {
+                    let clampedX = min(max(x, visible.minX), visible.maxX - size.width)
+                    let clampedY = min(max(y, visible.minY), visible.maxY - size.height)
+                    win.setFrameOrigin(NSPoint(x: clampedX, y: clampedY))
                     return
                 }
             }
