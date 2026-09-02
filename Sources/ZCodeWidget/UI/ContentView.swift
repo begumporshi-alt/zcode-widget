@@ -78,6 +78,12 @@ struct ContentView: View {
                         Label("Report", systemImage: "square.and.arrow.up")
                     }
                     .tag(4)
+
+                PromptsView()
+                    .tabItem {
+                        Label("Prompts", systemImage: "text.quote")
+                    }
+                    .tag(5)
             }
             .tabViewStyle(.automatic)
         }
