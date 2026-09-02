@@ -4,7 +4,7 @@ import GRDB
 /// Watches ~/.zcode/log/token-tail.jsonl for new entries appended by the Stop hook.
 /// Also polls the DB every 5 seconds as a fallback.
 final class TokenTailWatcher {
-    private let tailPath = "/Users/tushershikder/.zcode/log/token-tail.jsonl"
+    private let tailPath = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".zcode/log/token-tail.jsonl").path
     private var lastOffset: UInt64 = 0
     private var fd: Int32 = -1
     private var dispatchSource: DispatchSourceFileSystemObject?

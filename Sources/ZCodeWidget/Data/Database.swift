@@ -12,7 +12,7 @@ final class Database {
     let queue: DatabaseQueue
 
     private init() {
-        let path = "/Users/tushershikder/.zcode/cli/db/db.sqlite"
+        let path = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".zcode/cli/db/db.sqlite").path
         var config = Configuration()
         config.readonly = true
         // Read-only mode prevents lock contention with ZCode

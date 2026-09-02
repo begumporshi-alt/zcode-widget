@@ -3,7 +3,7 @@ import Foundation
 /// Scans ~/.zcode/skills/ for available skills
 final class SkillScanner {
     func scan() -> [SkillInfo] {
-        let skillsDir = URL(fileURLWithPath: "/Users/tushershikder/.zcode/skills")
+        let skillsDir = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".zcode/skills")
         var skills: [SkillInfo] = []
         
         do {

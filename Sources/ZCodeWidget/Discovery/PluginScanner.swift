@@ -3,7 +3,7 @@ import Foundation
 /// Scans ~/.zcode/cli/ for installed plugins using installed_plugins.json + config.json,
 /// then reads plugin.json from each plugin's installPath for version/description.
 final class PluginScanner {
-    private let cliDir = "/Users/tushershikder/.zcode/cli"
+    private let cliDir = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".zcode/cli").path
 
     func scan() -> [PluginInfo] {
         var plugins: [PluginInfo] = []
