@@ -1,94 +1,161 @@
 import SwiftUI
 import AppKit
 
+enum SidebarTab: Int, CaseIterable, Identifiable {
+    case tokens, skills, plugins, providers, report, prompts
+
+    var id: Int { rawValue }
+
+    var title: String {
+        switch self {
+        case .tokens: "Tokens"
+        case .skills: "Skills"
+        case .plugins: "Plugins"
+        case .providers: "Providers"
+        case .report: "Report"
+        case .prompts: "Prompts"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .tokens: "chart.bar.fill"
+        case .skills: "wand.and.stars"
+        case .plugins: "puzzlepiece.extension.fill"
+        case .providers: "server.rack"
+        case .report: "square.and.arrow.up"
+        case .prompts: "text.quote"
+        }
+    }
+}
+
 struct ContentView: View {
-    @State private var selectedTab = 0
+    @State private var selectedTab: SidebarTab = .tokens
+    @State private var hoveredTab: SidebarTab?
 
     var body: some View {
+        HStack(spacing: 0) {
+            sidebar
+            Divider()
+            content
+        }
+        .frame(width: 440, height: 560)
+        .background(Color(nsColor: .windowBackgroundColor))
+    }
+
+    // MARK: Sidebar
+
+    private var sidebar: some View {
         VStack(spacing: 0) {
-            // Header with controls
-            HStack {
+            // Brand
+            HStack(spacing: 7) {
                 Image(systemName: "sparkles.rectangle.stack")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(.secondary)
-                Text("ZCode Widget")
                     .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Color.accentColor)
+                Text("ZCode Widget")
+                    .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(.primary)
-                Spacer()
-
-                // Minimize to menu bar
-                Button(action: {
-                    hideWidget()
-                }) {
-                    Image(systemName: "minus")
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundStyle(.secondary)
-                        .frame(width: 22, height: 22)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .help("Hide to menu bar (Z icon)")
-
-                // Close — hides window; reopen via Z menu bar icon or ⌘⇧Z
-                Button(action: {
-                    hideWidget()
-                }) {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundStyle(.secondary)
-                        .frame(width: 22, height: 22)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .help("Hide (reopen via Z menu bar icon or ⌘⇧Z)")
+                Spacer(minLength: 0)
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
-            .background(Color(nsColor: .windowBackgroundColor))
+            .padding(.horizontal, 12)
+            .padding(.vertical, 13)
 
             Divider()
 
-            TabView(selection: $selectedTab) {
-                TokensView()
-                    .tabItem {
-                        Label("Tokens", systemImage: "chart.bar.fill")
+            // Scrollable nav list — future-proof for more sections
+            ScrollView {
+                VStack(spacing: 2) {
+                    ForEach(SidebarTab.allCases) { tab in
+                        sidebarItem(tab)
                     }
-                    .tag(0)
-
-                SkillsView()
-                    .tabItem {
-                        Label("Skills", systemImage: "wand.and.stars")
-                    }
-                    .tag(1)
-
-                PluginsView()
-                    .tabItem {
-                        Label("Plugins", systemImage: "puzzlepiece.extension.fill")
-                    }
-                    .tag(2)
-
-                ProvidersView()
-                    .tabItem {
-                        Label("Providers", systemImage: "server.rack")
-                    }
-                    .tag(3)
-
-                ReportView()
-                    .tabItem {
-                        Label("Report", systemImage: "square.and.arrow.up")
-                    }
-                    .tag(4)
-
-                PromptsView()
-                    .tabItem {
-                        Label("Prompts", systemImage: "text.quote")
-                    }
-                    .tag(5)
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 8)
             }
-            .tabViewStyle(.automatic)
+
+            Spacer(minLength: 0)
+
+            Divider()
+
+            // Footer: hide + quit
+            HStack(spacing: 6) {
+                Button(action: hideWidget) {
+                    Image(systemName: "minus")
+                        .font(.system(size: 10, weight: .bold))
+                        .frame(width: 22, height: 22)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+                .help("Hide to menu bar (Z icon)")
+
+                Spacer(minLength: 0)
+
+                Button(action: { NSApp.terminate(nil) }) {
+                    Image(systemName: "power")
+                        .font(.system(size: 10, weight: .bold))
+                        .frame(width: 22, height: 22)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+                .help("Quit ZCode Widget")
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
         }
-        .frame(width: 360, height: 520)
-        .background(Color(nsColor: .windowBackgroundColor))
+        .frame(width: 132)
+        .background(Color(nsColor: .controlBackgroundColor))
+    }
+
+    private func sidebarItem(_ tab: SidebarTab) -> some View {
+        let isSelected = selectedTab == tab
+        let isHovered = hoveredTab == tab
+        return Button {
+            withAnimation(.easeOut(duration: 0.15)) { selectedTab = tab }
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: tab.icon)
+                    .font(.system(size: 12, weight: .medium))
+                    .frame(width: 15)
+                Text(tab.title)
+                    .font(.system(size: 12, weight: isSelected ? .semibold : .regular))
+                Spacer(minLength: 0)
+            }
+            .foregroundStyle(isSelected ? Color.accentColor : (isHovered ? Color.primary : Color.secondary))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .background(
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .fill(isSelected ? Color.accentColor.opacity(0.14)
+                          : (isHovered ? Color.primary.opacity(0.06) : Color.clear))
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            hoveredTab = hovering ? tab : nil
+        }
+        .help(tab.title)
+    }
+
+    // MARK: Content
+
+    private var content: some View {
+        ZStack {
+            switch selectedTab {
+            case .tokens: TokensView()
+            case .skills: SkillsView()
+            case .plugins: PluginsView()
+            case .providers: ProvidersView()
+            case .report: ReportView()
+            case .prompts: PromptsView()
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .id(selectedTab)
+        .transition(.opacity)
+        .animation(.easeInOut(duration: 0.12), value: selectedTab)
     }
 
     private func hideWidget() {

@@ -60,49 +60,57 @@ final class ReportViewModel: ObservableObject {
 struct ReportView: View {
     @StateObject private var viewModel = ReportViewModel()
     @State private var toastMessage: String?
+    @State private var cardWidth: CGFloat = 300
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                Text("Your week in tokens — copy it as an image and share it.")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
+        GeometryReader { geo in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    Text("Your week in tokens — copy it as an image and share it.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
 
-                ReportCardView(
-                    dailyTotals: viewModel.dailyTotals,
-                    weeklyInput: viewModel.weeklyInput,
-                    weeklyOutput: viewModel.weeklyOutput,
-                    weeklyTotal: viewModel.weeklyTotal,
-                    weeklyCalls: viewModel.weeklyCalls,
-                    topModels: viewModel.topModels,
-                    busiestDay: viewModel.busiestDay,
-                    weekRangeText: viewModel.weekRangeText
-                )
-                .frame(maxWidth: .infinity)
-                .shadow(color: .black.opacity(0.25), radius: 10, y: 4)
+                    ReportCardView(
+                        dailyTotals: viewModel.dailyTotals,
+                        weeklyInput: viewModel.weeklyInput,
+                        weeklyOutput: viewModel.weeklyOutput,
+                        weeklyTotal: viewModel.weeklyTotal,
+                        weeklyCalls: viewModel.weeklyCalls,
+                        topModels: viewModel.topModels,
+                        busiestDay: viewModel.busiestDay,
+                        weekRangeText: viewModel.weekRangeText,
+                        width: cardWidth
+                    )
+                    .frame(maxWidth: .infinity)
+                    .shadow(color: .black.opacity(0.25), radius: 10, y: 4)
 
-                Button(action: copyReportImage) {
-                    Label("Copy Report Image", systemImage: "square.and.arrow.up")
-                        .font(.system(size: 13, weight: .semibold))
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 9)
+                    Button(action: copyReportImage) {
+                        Label("Copy Report Image", systemImage: "square.and.arrow.up")
+                            .font(.system(size: 13, weight: .semibold))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 9)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.green)
+
+                    Divider()
+
+                    Text("Last 17 Weeks")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.secondary)
+
+                    heatmapGrid
+                    heatmapLegend
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(.green)
-
-                Divider()
-
-                Text("Last 17 Weeks")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(.secondary)
-
-                heatmapGrid
-                heatmapLegend
+                .padding(16)
             }
-            .padding(16)
-        }
-        .onAppear {
-            viewModel.refresh()
+            .onAppear {
+                cardWidth = max(240, geo.size.width - 34)
+                viewModel.refresh()
+            }
+            .onChange(of: geo.size.width) { newWidth in
+                cardWidth = max(240, newWidth - 34)
+            }
         }
         .overlay(alignment: .bottom) {
             if let msg = toastMessage {
@@ -208,12 +216,13 @@ struct ReportView: View {
             weeklyCalls: viewModel.weeklyCalls,
             topModels: viewModel.topModels,
             busiestDay: viewModel.busiestDay,
-            weekRangeText: viewModel.weekRangeText
+            weekRangeText: viewModel.weekRangeText,
+            width: cardWidth
         )
 
         // ImageRenderer first (reliable on macOS 14+); fall back to an offscreen
         // NSHostingView snapshot for macOS 13 where ImageRenderer + Charts was buggy.
-        // scale 2 → crisp 656x860 PNG on Retina displays.
+        // scale 2 → crisp PNG on Retina displays.
         let renderer = ImageRenderer(content: card)
         renderer.scale = 2
         if let nsImage = renderer.nsImage {
@@ -221,7 +230,7 @@ struct ReportView: View {
             return
         }
         let hosting = NSHostingView(rootView: card)
-        hosting.frame = NSRect(x: 0, y: 0, width: 328, height: 430)
+        hosting.frame = NSRect(x: 0, y: 0, width: cardWidth, height: 430)
         hosting.layoutSubtreeIfNeeded()
         guard let rep = hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds) else {
             showToast("Could not render image")
@@ -290,6 +299,7 @@ struct ReportCardView: View {
     let topModels: [ModelTotal]
     let busiestDay: String?
     let weekRangeText: String
+    let width: CGFloat
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -372,7 +382,7 @@ struct ReportCardView: View {
             }
         }
         .padding(22)
-        .frame(width: 328, height: 430)
+        .frame(width: width, height: 430)
         .background(
             LinearGradient(
                 colors: [

@@ -17,7 +17,7 @@ class FloatingPanelController: NSWindowController {
         // KeyablePanel (not plain NSWindow) so text fields accept typing;
         // still borderless and movable by dragging the background.
         let window = KeyablePanel(
-            contentRect: NSRect(x: 0, y: 0, width: 360, height: 520),
+            contentRect: NSRect(x: 0, y: 0, width: 440, height: 560),
             styleMask: [.borderless, .resizable, .nonactivatingPanel],
             backing: .buffered,
             defer: false
