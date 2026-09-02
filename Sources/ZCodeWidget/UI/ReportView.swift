@@ -213,7 +213,10 @@ struct ReportView: View {
 
         // ImageRenderer first (reliable on macOS 14+); fall back to an offscreen
         // NSHostingView snapshot for macOS 13 where ImageRenderer + Charts was buggy.
-        if let nsImage = ImageRenderer(content: card).nsImage {
+        // scale 2 → crisp 656x860 PNG on Retina displays.
+        let renderer = ImageRenderer(content: card)
+        renderer.scale = 2
+        if let nsImage = renderer.nsImage {
             writeToClipboard(nsImage)
             return
         }
@@ -227,7 +230,12 @@ struct ReportView: View {
         hosting.cacheDisplay(in: hosting.bounds, to: rep)
         let image = NSImage(size: hosting.bounds.size)
         image.addRepresentation(rep)
-        writeToClipboard(image)
+        // Match the ImageRenderer's 2x output on the 1x fallback path.
+        let scaled = NSImage(size: NSSize(width: hosting.bounds.width * 2, height: hosting.bounds.height * 2), flipped: false) { rect in
+            image.draw(in: rect)
+            return true
+        }
+        writeToClipboard(scaled)
     }
 
     private func writeToClipboard(_ image: NSImage) {
