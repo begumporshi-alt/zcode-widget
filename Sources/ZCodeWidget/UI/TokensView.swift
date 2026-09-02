@@ -8,6 +8,7 @@ final class TokensViewModel: ObservableObject {
     @Published var totals = UsageTotals(totalInput: 0, totalOutput: 0, totalComputed: 0, callCount: 0)
     @Published var dailyTotals: [DailyUsage] = []
     @Published var recentTurns: [TurnRecord] = []
+    @Published var streak = 0
 
     private let repository = TokenUsageRepository()
     private var watcher: TokenTailWatcher?
@@ -26,6 +27,7 @@ final class TokensViewModel: ObservableObject {
             totals = try repository.totals()
             dailyTotals = try repository.dailyTotals(days: 7)
             recentTurns = try repository.recentTurns(limit: 20)
+            streak = try repository.streakDays()
         } catch {
             print("TokensViewModel.refresh error: \(error)")
         }
@@ -45,6 +47,20 @@ struct TokensView: View {
                     StatCard(title: "Input", value: formatTokens(viewModel.totals.totalInput), color: .blue)
                     StatCard(title: "Output", value: formatTokens(viewModel.totals.totalOutput), color: .orange)
                     StatCard(title: "Total", value: formatTokens(viewModel.totals.totalComputed), color: .green)
+                }
+
+                // Usage streak
+                if viewModel.streak > 0 {
+                    HStack(spacing: 4) {
+                        Image(systemName: "flame.fill")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.orange)
+                        Text("\(viewModel.streak)-day ZCode streak")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                    }
+                    .padding(.top, 2)
                 }
 
                 // 7-day bar chart

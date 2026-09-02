@@ -30,9 +30,11 @@ enum SidebarTab: Int, CaseIterable, Identifiable {
 }
 
 struct ContentView: View {
-    @State private var selectedTab: SidebarTab = .tokens
+    @ObservedObject private var appState = AppState.shared
     @State private var hoveredTab: SidebarTab?
     @StateObject private var ticker = ActivityTicker()
+    @StateObject private var settings = WidgetSettingsStore()
+    @State private var showSettings = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -48,6 +50,10 @@ struct ContentView: View {
         }
         .frame(width: 440, height: 560)
         .background(Color(nsColor: .windowBackgroundColor))
+        .onAppear { settings.load() }
+        .sheet(isPresented: $showSettings) {
+            SettingsSheet(settings: settings)
+        }
     }
 
     // MARK: Sidebar
@@ -84,8 +90,18 @@ struct ContentView: View {
 
             Divider()
 
-            // Footer: hide + quit
+            // Footer: settings, hide, quit
             HStack(spacing: 6) {
+                Button(action: { showSettings = true }) {
+                    Image(systemName: "gearshape")
+                        .font(.system(size: 10, weight: .bold))
+                        .frame(width: 22, height: 22)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+                .help("Settings")
+
                 Button(action: hideWidget) {
                     Image(systemName: "minus")
                         .font(.system(size: 10, weight: .bold))
@@ -116,10 +132,10 @@ struct ContentView: View {
     }
 
     private func sidebarItem(_ tab: SidebarTab) -> some View {
-        let isSelected = selectedTab == tab
+        let isSelected = appState.selectedTab == tab
         let isHovered = hoveredTab == tab
         return Button {
-            withAnimation(.easeOut(duration: 0.15)) { selectedTab = tab }
+            withAnimation(.easeOut(duration: 0.15)) { appState.selectedTab = tab }
         } label: {
             HStack(spacing: 8) {
                 Image(systemName: tab.icon)
@@ -150,7 +166,7 @@ struct ContentView: View {
 
     private var content: some View {
         ZStack {
-            switch selectedTab {
+            switch appState.selectedTab {
             case .tokens: TokensView()
             case .skills: SkillsView()
             case .plugins: PluginsView()
@@ -160,9 +176,9 @@ struct ContentView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .id(selectedTab)
+        .id(appState.selectedTab)
         .transition(.opacity)
-        .animation(.easeInOut(duration: 0.12), value: selectedTab)
+        .animation(.easeInOut(duration: 0.12), value: appState.selectedTab)
     }
 
     private func hideWidget() {

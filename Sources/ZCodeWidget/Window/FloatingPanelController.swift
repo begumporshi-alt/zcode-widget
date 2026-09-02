@@ -9,7 +9,9 @@ final class KeyablePanel: NSPanel {
     override var canBecomeKey: Bool { true }
 }
 
-class FloatingPanelController: NSWindowController {
+class FloatingPanelController: NSWindowController, NSWindowDelegate {
+    private static let originKey = "panelFrameOrigin"
+
     convenience init() {
         let contentView = ContentView()
         let hostingController = NSHostingController(rootView: contentView)
@@ -35,12 +37,31 @@ class FloatingPanelController: NSWindowController {
         window.isReleasedWhenClosed = false
 
         self.init(window: window)
+        window.delegate = self
         configureWindow()
     }
 
     private func configureWindow() {
         guard let win = window else { return }
-        // Center on screen on first launch
+        // Restore the saved position so the panel stays where the user put it;
+        // fall back to centering on first launch.
+        if let saved = UserDefaults.standard.string(forKey: Self.originKey) {
+            let parts = saved.split(separator: ",")
+            if parts.count == 2,
+               let x = Double(parts[0]), let y = Double(parts[1]),
+               let screen = NSScreen.main {
+                let point = NSPoint(x: x, y: y)
+                if screen.visibleFrame.insetBy(dx: -80, dy: -80).contains(point) {
+                    win.setFrameOrigin(point)
+                    return
+                }
+            }
+        }
         win.center()
+    }
+
+    func windowDidMove(_ notification: Notification) {
+        guard let origin = window?.frame.origin else { return }
+        UserDefaults.standard.set("\(Int(origin.x)),\(Int(origin.y))", forKey: Self.originKey)
     }
 }

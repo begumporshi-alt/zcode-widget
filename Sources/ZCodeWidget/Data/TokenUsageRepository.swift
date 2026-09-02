@@ -96,6 +96,44 @@ final class TokenUsageRepository {
         }
     }
 
+    /// Tokens used since the start of the local day (for the menu bar glance).
+    func todayTokens() throws -> Int {
+        try db.read { db in
+            let cutoffMs = Int64(Calendar.current.startOfDay(for: Date()).timeIntervalSince1970 * 1000)
+            return try Int.fetchOne(db, sql: "SELECT COALESCE(SUM(computed_total_tokens), 0) FROM turn_usage WHERE started_at >= ?", arguments: [cutoffMs]) ?? 0
+        }
+    }
+
+    /// Consecutive days with usage, ending today (or yesterday if today is
+    /// still empty). 0 when there is no usage history.
+    func streakDays() throws -> Int {
+        try db.read { db in
+            let days = try String.fetchAll(db, sql: """
+                SELECT DISTINCT date(started_at / 1000, 'unixepoch', 'localtime') as day
+                FROM turn_usage ORDER BY day DESC
+                """)
+            guard !days.isEmpty else { return 0 }
+
+            let fmt = DateFormatter()
+            fmt.dateFormat = "yyyy-MM-dd"
+            fmt.locale = Locale(identifier: "en_US_POSIX")
+            let cal = Calendar.current
+
+            var cursor = cal.startOfDay(for: Date())
+            if days.first != fmt.string(from: cursor) {
+                guard let yesterday = cal.date(byAdding: .day, value: -1, to: cursor) else { return 0 }
+                cursor = yesterday
+            }
+            var streak = 0
+            while days.contains(fmt.string(from: cursor)) {
+                streak += 1
+                guard let prev = cal.date(byAdding: .day, value: -1, to: cursor) else { break }
+                cursor = prev
+            }
+            return streak
+        }
+    }
+
     /// Token totals per model over the last `days` (from model_usage), best first
     func topModels(days: Int = 7, limit: Int = 3) throws -> [ModelTotal] {
         try db.read { db in

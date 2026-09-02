@@ -15,10 +15,13 @@ struct ZCodeWidgetApp {
 class AppDelegate: NSObject, NSApplicationDelegate {
     private var panelController: FloatingPanelController?
     private var statusItem: NSStatusItem?
+    private var statusView: StatusItemView?
+    private var statusTimer: Timer?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // 1. Hidden main menu — an accessory app has no menu bar, so without an
-        // Edit menu AppKit never delivers Cmd+C/V/X/A/Z to text fields.
+        // Edit menu AppKit never delivers Cmd+C/V/X/A/Z to text fields, and the
+        // View menu below powers the ⌘1…⌘6 section shortcuts.
         setupMainMenu()
 
         // 2. Register status bar item FIRST so it survives even if window is closed
@@ -29,6 +32,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         panelController?.showWindow(nil)
         panelController?.window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+
+        // 4. Menu bar glance — refresh every 30s while the widget runs
+        refreshStatusItem()
+        statusTimer = Timer.scheduledTimer(withTimeInterval: 30.0, repeats: true) { [weak self] _ in
+            self?.refreshStatusItem()
+        }
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        statusTimer?.invalidate()
     }
 
     /// Installs the app menu (Quit) and the standard Edit menu so clipboard
@@ -56,7 +69,31 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         editMenu.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
         editMenuItem.submenu = editMenu
 
+        // View menu: ⌘1…⌘6 switch sections (shows the panel if hidden)
+        let viewMenuItem = NSMenuItem()
+        mainMenu.addItem(viewMenuItem)
+        let viewMenu = NSMenu(title: "View")
+        for tab in SidebarTab.allCases {
+            let item = NSMenuItem(title: tab.title,
+                                  action: #selector(selectTab(_:)),
+                                  keyEquivalent: String(tab.rawValue + 1))
+            item.tag = tab.rawValue
+            item.target = self
+            viewMenu.addItem(item)
+        }
+        viewMenuItem.submenu = viewMenu
+
         NSApp.mainMenu = mainMenu
+    }
+
+    @objc private func selectTab(_ sender: NSMenuItem) {
+        guard let tab = SidebarTab(rawValue: sender.tag) else { return }
+        Task { @MainActor in
+            AppState.shared.selectedTab = tab
+            panelController?.showWindow(nil)
+            panelController?.window?.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+        }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
@@ -68,44 +105,57 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func setupStatusItem() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        if let button = statusItem?.button {
-            // Use a distinctive text "Z" so it's clearly our widget, not Gemini
-            button.title = " Z"
-            button.font = NSFont.systemFont(ofSize: 13, weight: .bold)
-            button.imagePosition = .imageOnly
-            button.image = createStatusBarIcon()
-            button.action = #selector(statusItemClicked(_:))
-            button.target = self
-            button.sendAction(on: [.leftMouseUp, .rightMouseUp])
+        let view = StatusItemView()
+        view.onLeftClick = { [weak self] in
+            self?.refreshStatusItem()  // fresh numbers on click
+            self?.togglePanel()
         }
+        view.onRightClick = { [weak self] in
+            self?.refreshStatusItem()
+            self?.showContextMenu()
+        }
+        statusItem?.view = view
+        statusView = view
     }
 
-    private func createStatusBarIcon() -> NSImage? {
-        let size = NSSize(width: 18, height: 18)
-        let image = NSImage(size: size)
-        image.lockFocus()
-        defer { image.unlockFocus() }
+    /// Menu bar glance: "Z 1.2M" with today's tokens; orange at ≥80% of the
+    /// daily budget, red when exceeded. Budget 0 = plain label color.
+    private func refreshStatusItem() {
+        let settings = WidgetSettingsStore()
+        settings.load()
+        let today = (try? TokenUsageRepository().todayTokens()) ?? 0
 
-        // Draw a "Z" letter
-        let attrs: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: 14, weight: .heavy),
-            .foregroundColor: NSColor.labelColor
-        ]
-        let str = "Z" as NSString
-        let strSize = str.size(withAttributes: attrs)
-        str.draw(at: NSPoint(x: (size.width - strSize.width) / 2,
-                             y: (size.height - strSize.height) / 2),
-                 withAttributes: attrs)
-        return image
-    }
-
-    @objc private func statusItemClicked(_ sender: NSStatusBarButton) {
-        let event = NSApp.currentEvent
-        if event?.type == .rightMouseUp {
-            showContextMenu()
+        let color: NSColor
+        if settings.dailyBudget > 0 {
+            let ratio = Double(today) / Double(settings.dailyBudget)
+            if ratio >= 1 {
+                color = .systemRed
+            } else if ratio >= 0.8 {
+                color = .systemOrange
+            } else {
+                color = .labelColor
+            }
         } else {
-            togglePanel()
+            color = .labelColor
         }
+
+        statusView?.text = Self.formatCompact(today)
+        statusView?.tint = color
+        statusView?.toolTip = settings.dailyBudget > 0
+            ? "\(Self.formatCompact(today)) of \(Self.formatCompact(settings.dailyBudget)) today"
+            : "\(Self.formatCompact(today)) tokens today"
+        if let width = statusView?.intrinsicContentSize.width {
+            statusItem?.length = width + 4
+        }
+    }
+
+    private static func formatCompact(_ n: Int) -> String {
+        if n >= 1_000_000 {
+            return String(format: "%.1fM", Double(n) / 1_000_000)
+        } else if n >= 1_000 {
+            return String(format: "%.1fK", Double(n) / 1_000)
+        }
+        return "\(n)"
     }
 
     private func togglePanel() {
@@ -127,9 +177,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         for item in menu.items {
             item.target = self
         }
-        statusItem?.menu = menu
-        statusItem?.button?.performClick(nil)
-        statusItem?.menu = nil
+        statusItem?.popUpMenu(menu)
     }
 
     @objc private func openWidget() {
@@ -145,4 +193,40 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func quitApp() {
         NSApp.terminate(nil)
     }
+}
+
+/// Custom status item view: draws "Z <today's tokens>" with an explicit color
+/// (label / orange / red). A plain NSStatusBarButton ignores title colors, so
+/// the text is drawn directly.
+private final class StatusItemView: NSView {
+    var text = "" { didSet { needsDisplay = true; invalidateIntrinsicContentSize() } }
+    var tint: NSColor = .labelColor { didSet { needsDisplay = true } }
+    var onLeftClick: (() -> Void)?
+    var onRightClick: (() -> Void)?
+
+    override var intrinsicContentSize: NSSize {
+        let width = ("Z \(text)" as NSString).size(withAttributes: Self.textAttributes).width
+        return NSSize(width: ceil(width) + 14, height: 24)
+    }
+
+    private static let textAttributes: [NSAttributedString.Key: Any] = [
+        .font: NSFont.systemFont(ofSize: 12, weight: .semibold),
+    ]
+
+    override func draw(_ dirtyRect: NSRect) {
+        let attrs: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 12, weight: .semibold),
+            .foregroundColor: tint,
+        ]
+        let string = "Z \(text)" as NSString
+        let size = string.size(withAttributes: attrs)
+        string.draw(
+            at: NSPoint(x: (bounds.width - size.width) / 2,
+                        y: (bounds.height - size.height) / 2),
+            withAttributes: attrs
+        )
+    }
+
+    override func mouseDown(with event: NSEvent) { onLeftClick?() }
+    override func rightMouseDown(with event: NSEvent) { onRightClick?() }
 }
