@@ -17,14 +17,46 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // 1. Register status bar item FIRST so it survives even if window is closed
+        // 1. Hidden main menu — an accessory app has no menu bar, so without an
+        // Edit menu AppKit never delivers Cmd+C/V/X/A/Z to text fields.
+        setupMainMenu()
+
+        // 2. Register status bar item FIRST so it survives even if window is closed
         setupStatusItem()
 
-        // 2. Create and show the panel
+        // 3. Create and show the panel
         panelController = FloatingPanelController()
         panelController?.showWindow(nil)
         panelController?.window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+    }
+
+    /// Installs the app menu (Quit) and the standard Edit menu so clipboard
+    /// shortcuts reach the panel's text fields.
+    private func setupMainMenu() {
+        let mainMenu = NSMenu()
+
+        let appMenuItem = NSMenuItem()
+        mainMenu.addItem(appMenuItem)
+        let appMenu = NSMenu()
+        appMenu.addItem(withTitle: "Quit ZCode Widget",
+                        action: #selector(NSApplication.terminate(_:)),
+                        keyEquivalent: "q")
+        appMenuItem.submenu = appMenu
+
+        let editMenuItem = NSMenuItem()
+        mainMenu.addItem(editMenuItem)
+        let editMenu = NSMenu(title: "Edit")
+        editMenu.addItem(withTitle: "Undo", action: Selector(("undo:")), keyEquivalent: "z")
+        editMenu.addItem(withTitle: "Redo", action: Selector(("redo:")), keyEquivalent: "Z")
+        editMenu.addItem(NSMenuItem.separator())
+        editMenu.addItem(withTitle: "Cut", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
+        editMenu.addItem(withTitle: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        editMenu.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        editMenu.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        editMenuItem.submenu = editMenu
+
+        NSApp.mainMenu = mainMenu
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
