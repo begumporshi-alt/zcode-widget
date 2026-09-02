@@ -100,6 +100,26 @@ The repo also ships a ZCode subagent definition (`agents/database-expert.md`, in
 - **Always answers in a fixed structure** — 1) issue/question, 2) assessment with evidence (file:line, counts), 3) recommended actions with expected impact, effort, and priority — plus alerts it found on its own
 - **Secrets-safe** — `.env` key names only; connection values are never displayed (used transiently, never echoed, only for explicitly-requested live checks)
 
+### Database backups
+
+`scripts/db-backup.sh` dumps a project's Supabase/Postgres database to a local backup — the piece the widget deliberately can't do itself (the widget never reads `.env` values; this script does, and passes the connection straight to `pg_dump` without ever printing it):
+
+```bash
+./scripts/db-backup.sh /path/to/project        # one or more project dirs
+```
+
+- Backs up to `~/db-backups/<project>-<timestamp>.dump` — pg_dump custom format, compressed, includes the `public`, `auth`, and `storage` schemas
+- Keeps the newest 14 dumps per project (override with `DB_BACKUP_KEEP` / `DB_BACKUP_DIR`)
+- Prefers `postgresql@17`'s pg_dump when installed, so newer Supabase servers (Postgres 15/17) dump fine even if the default pg_dump is older
+- Secrets-safe: the connection URL is read from the project's `.env` into a variable and passed straight to `pg_dump` — never echoed, logged, or printed; failures print a reason, never the URL
+
+Restore:
+
+```bash
+pg_restore --clean --if-exists --no-owner --no-privileges \
+  -d "<connection-url>" ~/db-backups/<file>.dump
+```
+
 ## Project structure
 
 ```
@@ -109,6 +129,8 @@ zcode-widget/
 ├── Package.swift             # SwiftPM manifest
 ├── agents/
 │   └── database-expert.md    # ZCode subagent: database expert behind the Database tab
+├── scripts/
+│   └── db-backup.sh          # Postgres backup helper (pg_dump custom format + rotation)
 ├── Resources/
 │   └── Info.plist            # LSUIElement=true, bundle id com.zcode.widget
 ├── Sources/ZCodeWidget/
