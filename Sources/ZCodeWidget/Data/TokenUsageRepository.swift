@@ -16,6 +16,12 @@ final class TokenUsageRepository {
         let computed_total: Int
     }
 
+    /// Decoded row for per-model aggregates
+    private struct ModelTotalRow: FetchableRecord, Decodable {
+        let model_id: String
+        let computed_total: Int
+    }
+
     /// Last N turn records for sparkline
     func recentTurns(limit: Int = 20) throws -> [TurnRecord] {
         try db.read { db in
@@ -79,6 +85,30 @@ final class TokenUsageRepository {
                 totalComputed: totalComputed,
                 callCount: callCount
             )
+        }
+    }
+
+    /// Number of turns in the last `days`
+    func turnCount(days: Int = 7) throws -> Int {
+        try db.read { db in
+            let cutoffMs = Int64(Calendar.current.date(byAdding: .day, value: -days, to: Date())!.timeIntervalSince1970 * 1000)
+            return try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM turn_usage WHERE started_at >= ?", arguments: [cutoffMs]) ?? 0
+        }
+    }
+
+    /// Token totals per model over the last `days` (from model_usage), best first
+    func topModels(days: Int = 7, limit: Int = 3) throws -> [ModelTotal] {
+        try db.read { db in
+            let cutoffMs = Int64(Calendar.current.date(byAdding: .day, value: -days, to: Date())!.timeIntervalSince1970 * 1000)
+            let rows = try ModelTotalRow.fetchAll(db, sql: """
+                SELECT model_id, COALESCE(SUM(computed_total_tokens), 0) as computed_total
+                FROM model_usage
+                WHERE started_at >= ?
+                GROUP BY model_id
+                ORDER BY computed_total DESC
+                LIMIT ?
+                """, arguments: [cutoffMs, limit])
+            return rows.map { ModelTotal(id: $0.model_id, computedTotal: $0.computed_total) }
         }
     }
 }

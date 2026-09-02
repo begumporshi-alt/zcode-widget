@@ -114,6 +114,12 @@ struct UsageTotals {
     let callCount: Int
 }
 
+/// Aggregated tokens per model (from model_usage), for the report card
+struct ModelTotal: Identifiable {
+    let id: String  // model_id
+    let computedTotal: Int
+}
+
 /// A discovered skill from ~/.zcode/skills/
 struct SkillInfo: Identifiable, Hashable {
     let id: String

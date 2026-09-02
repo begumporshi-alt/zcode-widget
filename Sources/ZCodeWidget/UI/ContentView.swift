@@ -72,6 +72,12 @@ struct ContentView: View {
                         Label("Providers", systemImage: "server.rack")
                     }
                     .tag(3)
+
+                ReportView()
+                    .tabItem {
+                        Label("Report", systemImage: "square.and.arrow.up")
+                    }
+                    .tag(4)
             }
             .tabViewStyle(.automatic)
         }
