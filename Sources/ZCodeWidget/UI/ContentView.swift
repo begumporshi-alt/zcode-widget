@@ -32,12 +32,19 @@ enum SidebarTab: Int, CaseIterable, Identifiable {
 struct ContentView: View {
     @State private var selectedTab: SidebarTab = .tokens
     @State private var hoveredTab: SidebarTab?
+    @StateObject private var ticker = ActivityTicker()
 
     var body: some View {
-        HStack(spacing: 0) {
-            sidebar
+        VStack(spacing: 0) {
+            HStack(spacing: 0) {
+                sidebar
+                Divider()
+                content
+            }
+
             Divider()
-            content
+
+            ActivityTickerBar(ticker: ticker)
         }
         .frame(width: 440, height: 560)
         .background(Color(nsColor: .windowBackgroundColor))
