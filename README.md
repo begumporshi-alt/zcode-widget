@@ -42,7 +42,7 @@ cd zcode-widget
 ./install.sh
 ```
 
-The script checks prerequisites (Xcode command line tools, `xcodegen` — installs it via Homebrew if missing), builds a Release binary, installs to `/Applications`, and drops a `zcode-widget` launcher in `/usr/local/bin`.
+The script checks prerequisites (Xcode command line tools, `xcodegen` — installs it via Homebrew if missing), builds a Release binary, installs to `/Applications`, drops a `zcode-widget` launcher in `/usr/local/bin`, and installs the `database-expert` ZCode subagent to `~/.zcode/agents/`.
 
 ### Option C — Manual build from source
 
@@ -91,6 +91,15 @@ Shows every project you've worked on in ZCode (from `session` history, most rece
 
 SQL parsing is comment- and string-aware, deduplicates re-imported migration files and objects, and caps the work per project so it stays instant even on large repos.
 
+### The database-expert subagent
+
+The repo also ships a ZCode subagent definition (`agents/database-expert.md`, installed to `~/.zcode/agents/` by `install.sh`) — the intelligent counterpart to the Database tab. In any new ZCode session it's available as the `database-expert` agent: ask ZCode anything about your projects' databases — RLS coverage, index gaps, trigger behavior, query performance, migration reviews, health sweeps — and ZCode can delegate to it.
+
+- **Project-aware** — discovers your projects from ZCode's session history and rebuilds current schema knowledge (tables, RLS policies, functions, triggers, **indexes**, and integrity constraints) from migration files on every invocation
+- **Read-only by default** — observes, analyzes, advises, answers; never modifies the database or project files unless explicitly instructed; connects to a live database only when you explicitly ask
+- **Always answers in a fixed structure** — 1) issue/question, 2) assessment with evidence (file:line, counts), 3) recommended actions with expected impact, effort, and priority — plus alerts it found on its own
+- **Secrets-safe** — `.env` key names only; connection values are never displayed (used transiently, never echoed, only for explicitly-requested live checks)
+
 ## Project structure
 
 ```
@@ -98,6 +107,8 @@ zcode-widget/
 ├── install.sh                # One-command installer (Option B)
 ├── project.yml               # XcodeGen manifest (GRDB dependency)
 ├── Package.swift             # SwiftPM manifest
+├── agents/
+│   └── database-expert.md    # ZCode subagent: database expert behind the Database tab
 ├── Resources/
 │   └── Info.plist            # LSUIElement=true, bundle id com.zcode.widget
 ├── Sources/ZCodeWidget/

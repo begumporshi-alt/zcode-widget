@@ -69,7 +69,15 @@ else
     sudo chmod +x "$BIN_DIR/zcode-widget"
 fi
 
+# --- zcode subagent -----------------------------------------------------------
+if [[ -f "$REPO_DIR/agents/database-expert.md" ]]; then
+    info "Installing database-expert subagent to ~/.zcode/agents/…"
+    mkdir -p "$HOME/.zcode/agents"
+    cp "$REPO_DIR/agents/database-expert.md" "$HOME/.zcode/agents/database-expert.md"
+fi
+
 info "Done! Look for the Z icon in your menu bar."
 echo    "    • Toggle panel:   left-click the Z icon (or run: zcode-widget)"
 echo    "    • Menu:           right-click the Z icon"
 echo    "    • The widget reads your ZCode data from ~/.zcode/ automatically."
+echo    "    • The database-expert ZCode subagent is active in new ZCode sessions."
