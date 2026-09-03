@@ -51,9 +51,18 @@ struct ContentView: View {
 
             Divider()
 
-            ActivityTickerBar(ticker: ticker)
+            // Ticker strip + bottom-right resize grip (shares the same
+            // background so the grip reads as the panel's corner).
+            HStack(spacing: 0) {
+                ActivityTickerBar(ticker: ticker)
+                ResizeGrip()
+                    .frame(width: 22)
+                    .frame(maxHeight: .infinity)
+            }
         }
-        .frame(width: 440, height: 560)
+        // Grows with the window; the resize grip is the only way to change the
+        // size of this borderless panel.
+        .frame(minWidth: PanelMetrics.minSize.width, minHeight: PanelMetrics.minSize.height)
         .background(Color(nsColor: .windowBackgroundColor))
         .onAppear {
             settings.load()

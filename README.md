@@ -6,7 +6,7 @@ A floating macOS dashboard panel for ZCode: token usage stats, searchable skill/
 
 ## Features
 
-- **Floating always-on-top panel** (440×560pt) that lives in the macOS menu bar, with a scrollable sidebar (8 sections) — ⌘1…⌘8 jump straight to a section
+- **Floating always-on-top panel** that lives in the macOS menu bar, with a scrollable sidebar (8 sections) — ⌘1…⌘8 jump straight to a section. Drag the grip in the bottom-right corner to resize (440×560pt default, minimum 360×480); position and size are remembered between launches
 - **Tokens tab** — token usage stats from `~/.zcode/cli/db/db.sqlite`, 7-day bar chart, usage streak, recent turns list
 - **Skills tab** — searchable picker of `~/.zcode/skills/` with copy-to-clipboard for slash commands
 - **Plugins tab** — searchable picker with copy-to-clipboard
@@ -71,6 +71,7 @@ open build/Build/Products/Release/ZCodeWidget.app
 | Add a task | **Tasks** tab → **New** → type a title, optionally set a due date/time (reminders go on at the due time) |
 | See due tasks | **Z** icon right-click menu lists tasks due within 24 h; click one to open the Tasks tab |
 | Move panel | Drag anywhere on the panel (position is remembered) |
+| Resize panel | Drag the **corner grip** (bottom-right, next to the ticker) — minimum 360×480, size is remembered |
 
 ### The Tasks tab
 
@@ -181,7 +182,8 @@ zcode-widget/
 │   │   ├── ActivityTickerBar.swift  # Live bottom ticker strip
 │   │   └── ToastView.swift      # Copy-to-clipboard feedback toast
 │   └── Window/
-│       └── FloatingPanelController.swift  # KeyablePanel (typing-capable borderless panel)
+│       ├── FloatingPanelController.swift  # KeyablePanel, position + size restore/clamp
+│       └── ResizeGripView.swift           # Bottom-right drag-to-resize grip (borderless panels have no edges)
 └── zcode-widget              # Shell launcher script (dev copy)
 ```
 
