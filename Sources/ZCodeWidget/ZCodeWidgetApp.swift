@@ -21,19 +21,27 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         // 1. Hidden main menu — an accessory app has no menu bar, so without an
         // Edit menu AppKit never delivers Cmd+C/V/X/A/Z to text fields, and the
-        // View menu below powers the ⌘1…⌘7 section shortcuts.
+        // View menu below powers the ⌘1…⌘8 section shortcuts.
         setupMainMenu()
 
         // 2. Register status bar item FIRST so it survives even if window is closed
         setupStatusItem()
 
-        // 3. Create and show the panel
+        // 3. Tasks: load stored tasks, re-arm pending reminders, start the due
+        // scanner. A reminder banner click opens the panel on the Tasks tab.
+        TaskStore.shared.load()
+        TaskReminderManager.shared.onOpenTasks = { [weak self] in
+            self?.openTasksTab()
+        }
+        TaskReminderManager.shared.start()
+
+        // 4. Create and show the panel
         panelController = FloatingPanelController()
         panelController?.showWindow(nil)
         panelController?.window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
 
-        // 4. Menu bar glance — refresh every 30s while the widget runs
+        // 5. Menu bar glance — refresh every 30s while the widget runs
         refreshStatusItem()
         statusTimer = Timer.scheduledTimer(withTimeInterval: 30.0, repeats: true) { [weak self] _ in
             self?.refreshStatusItem()
@@ -90,10 +98,22 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         guard let tab = SidebarTab(rawValue: sender.tag) else { return }
         Task { @MainActor in
             AppState.shared.selectedTab = tab
-            panelController?.showWindow(nil)
-            panelController?.window?.makeKeyAndOrderFront(nil)
-            NSApp.activate(ignoringOtherApps: true)
+            showPanel()
         }
+    }
+
+    /// Opens the panel on the Tasks tab (menu item, banner click, context menu).
+    @objc private func openTasksTab() {
+        Task { @MainActor in
+            AppState.shared.selectedTab = .tasks
+            showPanel()
+        }
+    }
+
+    private func showPanel() {
+        panelController?.showWindow(nil)
+        panelController?.window?.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
@@ -119,11 +139,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// Menu bar glance: "Z 1.2M" with today's tokens; orange at ≥80% of the
-    /// daily budget, red when exceeded. Budget 0 = plain label color.
+    /// daily budget, red when exceeded. Budget 0 = plain label color. The
+    /// tooltip also reports tasks due within 24 h.
     private func refreshStatusItem() {
         let settings = WidgetSettingsStore()
         settings.load()
         let today = (try? TokenUsageRepository().todayTokens()) ?? 0
+        let dueCount = TaskStore.shared.dueSoonCount
 
         let color: NSColor
         if settings.dailyBudget > 0 {
@@ -141,9 +163,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         statusView?.text = Self.formatCompact(today)
         statusView?.tint = color
-        statusView?.toolTip = settings.dailyBudget > 0
-            ? "\(Self.formatCompact(today)) of \(Self.formatCompact(settings.dailyBudget)) today"
+        var tip = settings.dailyBudget > 0
+            ? "\(Self.formatCompact(today)) of \(Self.formatCompact(settings.dailyBudget)) tokens today"
             : "\(Self.formatCompact(today)) tokens today"
+        if dueCount > 0 {
+            tip += dueCount == 1 ? " · 1 task due" : " · \(dueCount) tasks due"
+        }
+        statusView?.toolTip = tip
         if let width = statusView?.intrinsicContentSize.width {
             statusItem?.length = width + 4
         }
@@ -170,8 +196,30 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func showContextMenu() {
         let menu = NSMenu()
+
+        // Tasks quick glance — each due task opens the panel on the Tasks tab.
+        let dueTasks = TaskStore.shared.dueSoonTasks
+        if !dueTasks.isEmpty {
+            for task in dueTasks.prefix(6) {
+                let item = NSMenuItem(title: task.title,
+                                      action: #selector(openTasksTab),
+                                      keyEquivalent: "")
+                item.target = self
+                menu.addItem(item)
+            }
+            if dueTasks.count > 6 {
+                let more = NSMenuItem(title: "…and \(dueTasks.count - 6) more", action: nil, keyEquivalent: "")
+                more.isEnabled = false
+                menu.addItem(more)
+            }
+            menu.addItem(NSMenuItem.separator())
+        }
+
         menu.addItem(NSMenuItem(title: "Show ZCode Widget", action: #selector(openWidget), keyEquivalent: "o"))
         menu.addItem(NSMenuItem(title: "Hide ZCode Widget", action: #selector(hideWidget), keyEquivalent: "h"))
+        if !dueTasks.isEmpty {
+            menu.addItem(NSMenuItem(title: "Open Tasks", action: #selector(openTasksTab), keyEquivalent: ""))
+        }
         menu.addItem(NSMenuItem.separator())
         menu.addItem(NSMenuItem(title: "Quit ZCode Widget", action: #selector(quitApp), keyEquivalent: "q"))
         for item in menu.items {
@@ -181,9 +229,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func openWidget() {
-        panelController?.showWindow(nil)
-        panelController?.window?.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
+        showPanel()
     }
 
     @objc private func hideWidget() {

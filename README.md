@@ -6,7 +6,7 @@ A floating macOS dashboard panel for ZCode: token usage stats, searchable skill/
 
 ## Features
 
-- **Floating always-on-top panel** (440×560pt) that lives in the macOS menu bar, with a scrollable sidebar (7 sections) — ⌘1…⌘7 jump straight to a section
+- **Floating always-on-top panel** (440×560pt) that lives in the macOS menu bar, with a scrollable sidebar (8 sections) — ⌘1…⌘8 jump straight to a section
 - **Tokens tab** — token usage stats from `~/.zcode/cli/db/db.sqlite`, 7-day bar chart, usage streak, recent turns list
 - **Skills tab** — searchable picker of `~/.zcode/skills/` with copy-to-clipboard for slash commands
 - **Plugins tab** — searchable picker with copy-to-clipboard
@@ -14,6 +14,7 @@ A floating macOS dashboard panel for ZCode: token usage stats, searchable skill/
 - **Report tab** — one-tap weekly shareable summary card (copy as 2× PNG) plus a 119-day activity heatmap
 - **Prompts tab** — LLM-powered prompt enhancer (uses your configured ZCode providers) and a prompt library with curated built-ins plus your own saved prompts
 - **Database tab** — per-project database dashboard: auto-discovers the projects you work on in ZCode, then inventories each project's migrations, tables & columns (with RLS badges), row-level security policies, functions, triggers, connection hints (key names only — values are never read), and architecture/blueprint notes from ZCode memories + in-repo docs
+- **Tasks tab** — personal task manager with reminders: tasks with due dates & times, priorities and notes; macOS notification at the due time (with a **Mark Done** action), due-soon badge on the sidebar and menu-bar tooltip, and quick access to due tasks from the Z icon's right-click menu
 - **Menu bar glance** — the Z icon shows today's token usage, turning red when you pass your daily budget (set in Settings); left-click toggles the panel, right-click shows a menu
 - **Activity ticker** — live strip at the bottom showing the latest model calls as they land
 - **Live updates** via FSEvents watcher on `~/.zcode/log/token-tail.jsonl`
@@ -60,14 +61,26 @@ open build/Build/Products/Release/ZCodeWidget.app
 | Action | How |
 |---|---|
 | Toggle panel | Click the **Z** icon in the menu bar (left-click), or run `zcode-widget` |
-| Jump to a section | Click a sidebar item, or press **⌘1…⌘7** (Tokens…Database) |
+| Jump to a section | Click a sidebar item, or press **⌘1…⌘8** (Tokens…Tasks) |
 | Open menu | Right-click the **Z** icon → Show / Hide / Quit |
 | Hide panel | Click **−** in the footer |
 | Copy slash command | Tap a skill/plugin in its tab |
 | Edit model providers | **Providers** tab → tap a provider, or **+** to add one |
 | Set daily budget | Gear icon in the footer → Settings |
 | Track a project's database | **Database** tab → **+** to add any folder |
+| Add a task | **Tasks** tab → **New** → type a title, optionally set a due date/time (reminders go on at the due time) |
+| See due tasks | **Z** icon right-click menu lists tasks due within 24 h; click one to open the Tasks tab |
 | Move panel | Drag anywhere on the panel (position is remembered) |
+
+### The Tasks tab
+
+A lightweight task list with due-time reminders that live in `~/.zcode/widget-tasks.json`:
+
+- **New / edit** — title, notes, optional due date & time (defaults to +1 h), a priority (Low / Medium / High), and a **Remind me at the due time** switch
+- **Notifications** — at the due time macOS shows a banner (even if the widget is closed); it carries a **Mark Done** action, and clicking the banner opens the panel on the Tasks tab. First reminder asks for notification permission.
+- **Overdue handling** — rows show relative due times and turn red when overdue; a task saved already-overdue reminds immediately. Stale overdue tasks are never re-announced after a relaunch.
+- **Badges & glance** — the sidebar shows a red count of tasks due within 24 h; the **Z** icon's tooltip and right-click menu list due tasks
+- **Organizing** — tap the circle to complete (moves to the collapsible **Completed** section, tap again to reopen), tap a row to edit, trash to delete
 
 ### The Providers tab
 
@@ -144,6 +157,8 @@ zcode-widget/
 │   │   ├── ProviderConfigStore.swift  # Read/write ~/.zcode/v2/config.json (surgical, backups)
 │   │   ├── PromptEnhancer.swift    # LLM enhance calls through configured providers
 │   │   ├── PromptLibraryStore.swift # Prompt library (~/.zcode/prompts.json)
+│   │   ├── TaskStore.swift          # Task items (~/.zcode/widget-tasks.json)
+│   │   ├── TaskReminderManager.swift # Local notifications + due-task scanner
 │   │   ├── WidgetSettingsStore.swift # Daily budget + pinned folders (~/.zcode/widget-settings.json)
 │   │   └── ActivityTicker.swift    # Latest-call ticker state
 │   ├── Database/
@@ -153,7 +168,7 @@ zcode-widget/
 │   │   ├── SkillScanner.swift   # Scans ~/.zcode/skills/ for SKILL.md
 │   │   └── PluginScanner.swift  # Reads installed_plugins.json + config.json
 │   ├── UI/
-│   │   ├── ContentView.swift    # Sidebar + section switcher (7 sections)
+│   │   ├── ContentView.swift    # Sidebar + section switcher (8 sections)
 │   │   ├── TokensView.swift     # Stats cards + chart + streak + turn list
 │   │   ├── SkillsView.swift     # Searchable skill picker + copy slash command
 │   │   ├── PluginsView.swift    # Searchable plugin picker + copy slash command
@@ -161,6 +176,7 @@ zcode-widget/
 │   │   ├── ReportView.swift     # Weekly shareable card + heatmap
 │   │   ├── PromptsView.swift    # Prompt enhancer + library
 │   │   ├── DatabaseView.swift   # Per-project database dashboard
+│   │   ├── TasksView.swift      # Task list + editor (due dates, priorities)
 │   │   ├── SettingsView.swift   # Settings sheet (daily budget)
 │   │   ├── ActivityTickerBar.swift  # Live bottom ticker strip
 │   │   └── ToastView.swift      # Copy-to-clipboard feedback toast
@@ -182,7 +198,7 @@ Note: `started_at` is stored as **INTEGER milliseconds** since Unix epoch (not I
 ## Notes
 
 - The app is a background accessory (`LSUIElement = true`), so it won't appear in the Dock — look for the **Z** icon in the menu bar.
-- All data paths are read from the current user's home directory; the widget never writes anywhere except provider-config edits (with backup) in `~/.zcode/v2/`.
+- All data paths are read from the current user's home directory; the widget never writes anywhere except provider-config edits (with backup) in `~/.zcode/v2/` and its own task file in `~/.zcode/widget-tasks.json`.
 
 ## License
 

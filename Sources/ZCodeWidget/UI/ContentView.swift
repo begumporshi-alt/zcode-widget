@@ -2,7 +2,7 @@ import SwiftUI
 import AppKit
 
 enum SidebarTab: Int, CaseIterable, Identifiable {
-    case tokens, skills, plugins, providers, report, prompts, database
+    case tokens, skills, plugins, providers, report, prompts, database, tasks
 
     var id: Int { rawValue }
 
@@ -15,6 +15,7 @@ enum SidebarTab: Int, CaseIterable, Identifiable {
         case .report: "Report"
         case .prompts: "Prompts"
         case .database: "Database"
+        case .tasks: "Tasks"
         }
     }
 
@@ -27,6 +28,7 @@ enum SidebarTab: Int, CaseIterable, Identifiable {
         case .report: "square.and.arrow.up"
         case .prompts: "text.quote"
         case .database: "cylinder.split.1x2"
+        case .tasks: "checklist"
         }
     }
 }
@@ -36,6 +38,7 @@ struct ContentView: View {
     @State private var hoveredTab: SidebarTab?
     @StateObject private var ticker = ActivityTicker()
     @StateObject private var settings = WidgetSettingsStore()
+    @ObservedObject private var taskStore = TaskStore.shared
     @State private var showSettings = false
 
     var body: some View {
@@ -52,7 +55,10 @@ struct ContentView: View {
         }
         .frame(width: 440, height: 560)
         .background(Color(nsColor: .windowBackgroundColor))
-        .onAppear { settings.load() }
+        .onAppear {
+            settings.load()
+            taskStore.load()
+        }
         .sheet(isPresented: $showSettings) {
             SettingsSheet(settings: settings)
         }
@@ -145,7 +151,23 @@ struct ContentView: View {
                     .frame(width: 15)
                 Text(tab.title)
                     .font(.system(size: 12, weight: isSelected ? .semibold : .regular))
-                Spacer(minLength: 0)
+                if tab == .tasks {
+                    if taskStore.dueSoonCount > 0 {
+                        ZStack {
+                            Circle()
+                                .fill(Color.red)
+                            Text(taskStore.dueSoonCount > 9 ? "9+" : "\(taskStore.dueSoonCount)")
+                                .font(.system(size: 8, weight: .bold))
+                                .foregroundStyle(.white)
+                        }
+                        .frame(width: 15, height: 15)
+                        .help("Tasks due soon")
+                    } else {
+                        Spacer(minLength: 0)
+                    }
+                } else {
+                    Spacer(minLength: 0)
+                }
             }
             .foregroundStyle(isSelected ? Color.accentColor : (isHovered ? Color.primary : Color.secondary))
             .padding(.horizontal, 10)
@@ -176,6 +198,7 @@ struct ContentView: View {
             case .report: ReportView()
             case .prompts: PromptsView()
             case .database: DatabaseView()
+            case .tasks: TasksView()
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
