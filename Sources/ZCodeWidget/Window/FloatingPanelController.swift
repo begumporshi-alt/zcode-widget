@@ -22,6 +22,10 @@ class FloatingPanelController: NSWindowController, NSWindowDelegate {
     convenience init() {
         let contentView = ContentView()
         let hostingController = NSHostingController(rootView: contentView)
+        // Belt & braces for live resize: the hosting view must track the
+        // window's content bounds (a missed autoresize leaves the SwiftUI
+        // surface at its old size, i.e. blank window around the content).
+        hostingController.view.autoresizingMask = [.width, .height]
 
         // KeyablePanel (not plain NSWindow) so text fields accept typing;
         // still borderless and movable by dragging the background.

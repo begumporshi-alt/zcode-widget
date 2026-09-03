@@ -70,6 +70,25 @@ final class ResizeGripView: NSView {
 
         window.setFrame(NSRect(origin: dragStartFrame.origin, size: NSSize(width: width, height: height)),
                         display: true)
+        // Manual setFrame bypasses AppKit's live-resize session, so the
+        // SwiftUI surface is not automatically re-laid out per frame — do it
+        // now or the content can lag/stall behind the new window size.
+        window.contentView?.layoutSubtreeIfNeeded()
+        window.contentView?.needsDisplay = true
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        // After a drag the SwiftUI surface can be left mid-layout (blank
+        // content). Force one final layout + paint pass on the next runloop
+        // turn so the settled size is always fully drawn.
+        guard let window else { return }
+        DispatchQueue.main.async {
+            window.contentView?.needsLayout = true
+            window.contentView?.layoutSubtreeIfNeeded()
+            window.contentView?.needsDisplay = true
+            window.displayIfNeeded()
+        }
+        dragStartFrame = .zero
     }
 }
 
