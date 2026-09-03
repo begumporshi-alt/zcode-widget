@@ -52,12 +52,14 @@ struct ContentView: View {
             Divider()
 
             // Ticker strip + bottom-right resize grip (shares the same
-            // background so the grip reads as the panel's corner).
+            // background so the grip reads as the panel's corner). The grip
+            // is FIXED-size: a flexible (maxHeight .infinity) grip made this
+            // whole row greedy — it absorbed every spare pixel, floating the
+            // ticker mid-window with empty space above and below it.
             HStack(spacing: 0) {
                 ActivityTickerBar(ticker: ticker)
                 ResizeGrip()
-                    .frame(width: 22)
-                    .frame(maxHeight: .infinity)
+                    .frame(width: 22, height: 28)
             }
         }
         // Grows with the window; the resize grip is the only way to change the
