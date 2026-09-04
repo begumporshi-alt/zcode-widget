@@ -2,7 +2,7 @@ import SwiftUI
 import AppKit
 
 enum SidebarTab: Int, CaseIterable, Identifiable {
-    case tokens, skills, plugins, providers, report, prompts, database, tasks
+    case tokens, skills, plugins, providers, report, prompts, database, tasks, thermal
 
     var id: Int { rawValue }
 
@@ -16,6 +16,7 @@ enum SidebarTab: Int, CaseIterable, Identifiable {
         case .prompts: "Prompts"
         case .database: "Database"
         case .tasks: "Tasks"
+        case .thermal: "Thermal"
         }
     }
 
@@ -29,6 +30,7 @@ enum SidebarTab: Int, CaseIterable, Identifiable {
         case .prompts: "text.quote"
         case .database: "cylinder.split.1x2"
         case .tasks: "checklist"
+        case .thermal: "thermometer.medium"
         }
     }
 }
@@ -39,6 +41,7 @@ struct ContentView: View {
     @StateObject private var ticker = ActivityTicker()
     @StateObject private var settings = WidgetSettingsStore()
     @ObservedObject private var taskStore = TaskStore.shared
+    @ObservedObject private var thermalMonitor = ThermalMonitor.shared
     @State private var showSettings = false
 
     var body: some View {
@@ -176,6 +179,20 @@ struct ContentView: View {
                     } else {
                         Spacer(minLength: 0)
                     }
+                } else if tab == .thermal {
+                    if thermalMonitor.isHot {
+                        ZStack {
+                            Circle()
+                                .fill(Color.red)
+                            Image(systemName: "flame.fill")
+                                .font(.system(size: 7, weight: .bold))
+                                .foregroundStyle(.white)
+                        }
+                        .frame(width: 15, height: 15)
+                        .help("Machine hot — open Thermal")
+                    } else {
+                        Spacer(minLength: 0)
+                    }
                 } else {
                     Spacer(minLength: 0)
                 }
@@ -210,6 +227,7 @@ struct ContentView: View {
             case .prompts: PromptsView()
             case .database: DatabaseView()
             case .tasks: TasksView()
+            case .thermal: ThermalView()
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

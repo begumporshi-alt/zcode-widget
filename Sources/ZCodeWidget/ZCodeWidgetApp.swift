@@ -12,6 +12,7 @@ struct ZCodeWidgetApp {
     }
 }
 
+@MainActor
 class AppDelegate: NSObject, NSApplicationDelegate {
     private var panelController: FloatingPanelController?
     private var statusItem: NSStatusItem?
@@ -35,13 +36,21 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
         TaskReminderManager.shared.start()
 
-        // 4. Create and show the panel
+        // 4. Thermal: watch macOS thermal pressure + CPU load; alerts name the
+        // hot process and the chat behind it. A banner click opens the Thermal
+        // tab. Kept running so alerts fire even while the panel is hidden.
+        ThermalMonitor.shared.onOpenThermal = { [weak self] in
+            self?.openThermalTab()
+        }
+        ThermalMonitor.shared.start()
+
+        // 5. Create and show the panel
         panelController = FloatingPanelController()
         panelController?.showWindow(nil)
         panelController?.window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
 
-        // 5. Menu bar glance — refresh every 30s while the widget runs
+        // 6. Menu bar glance — refresh every 30s while the widget runs
         refreshStatusItem()
         statusTimer = Timer.scheduledTimer(withTimeInterval: 30.0, repeats: true) { [weak self] _ in
             self?.refreshStatusItem()
@@ -77,7 +86,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         editMenu.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
         editMenuItem.submenu = editMenu
 
-        // View menu: ⌘1…⌘7 switch sections (shows the panel if hidden)
+        // View menu: ⌘1…⌘9 switch sections (shows the panel if hidden)
         let viewMenuItem = NSMenuItem()
         mainMenu.addItem(viewMenuItem)
         let viewMenu = NSMenu(title: "View")
@@ -106,6 +115,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func openTasksTab() {
         Task { @MainActor in
             AppState.shared.selectedTab = .tasks
+            showPanel()
+        }
+    }
+
+    /// Opens the panel on the Thermal tab (thermal banner click, context menu).
+    @objc private func openThermalTab() {
+        Task { @MainActor in
+            AppState.shared.selectedTab = .thermal
             showPanel()
         }
     }
@@ -196,6 +213,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func showContextMenu() {
         let menu = NSMenu()
+
+        // Machine-hot shortcut — one click to the Thermal tab.
+        if ThermalMonitor.shared.isHot {
+            menu.addItem(NSMenuItem(title: "🔥 Mac running hot — open Thermal",
+                                    action: #selector(openThermalTab),
+                                    keyEquivalent: ""))
+            menu.addItem(NSMenuItem.separator())
+        }
 
         // Tasks quick glance — each due task opens the panel on the Tasks tab.
         let dueTasks = TaskStore.shared.dueSoonTasks

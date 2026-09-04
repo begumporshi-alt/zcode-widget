@@ -11,6 +11,10 @@ import UserNotifications
 ///    tasks that were saved already-overdue and tasks whose scheduled banner
 ///    could not be registered. Tasks whose delivery was already scheduled are
 ///    skipped (via `lastRemindedAt`) so no double banner appears.
+///
+/// This manager is also the single `UNUserNotificationCenter` delegate for the
+/// whole widget, so thermal banners (category `THERMAL_ALERT`, posted by
+/// ThermalMonitor) are routed here: banner taps open the Thermal tab.
 final class TaskReminderManager: NSObject, UNUserNotificationCenterDelegate {
     static let shared = TaskReminderManager()
 
@@ -30,6 +34,10 @@ final class TaskReminderManager: NSObject, UNUserNotificationCenterDelegate {
     /// action) — the app should show the panel on the Tasks tab.
     var onOpenTasks: (() -> Void)?
 
+    /// Invoked when the user clicks a thermal alert banner — shows the Thermal
+    /// tab.
+    var onOpenThermal: (() -> Void)?
+
     private var scanTimer: Timer?
     private var started = false
     private var isAuthorized = false
@@ -45,11 +53,15 @@ final class TaskReminderManager: NSObject, UNUserNotificationCenterDelegate {
         let markDone = UNNotificationAction(identifier: Self.markDoneActionID,
                                             title: "Mark Done",
                                             options: [])
-        let category = UNNotificationCategory(identifier: Self.reminderCategoryID,
-                                              actions: [markDone],
-                                              intentIdentifiers: [],
-                                              options: [])
-        center.setNotificationCategories([category])
+        let taskCategory = UNNotificationCategory(identifier: Self.reminderCategoryID,
+                                                  actions: [markDone],
+                                                  intentIdentifiers: [],
+                                                  options: [])
+        let thermalCategory = UNNotificationCategory(identifier: ThermalMonitor.categoryID,
+                                                     actions: [],
+                                                     intentIdentifiers: [],
+                                                     options: [])
+        center.setNotificationCategories([taskCategory, thermalCategory])
 
         center.getNotificationSettings { [weak self] settings in
             DispatchQueue.main.async {
@@ -176,6 +188,17 @@ final class TaskReminderManager: NSObject, UNUserNotificationCenterDelegate {
     func userNotificationCenter(_ center: UNUserNotificationCenter,
                                 didReceive response: UNNotificationResponse,
                                 withCompletionHandler completionHandler: @escaping () -> Void) {
+        let category = response.notification.request.content.categoryIdentifier
+        if category == ThermalMonitor.categoryID {
+            if response.actionIdentifier == UNNotificationDefaultActionIdentifier {
+                DispatchQueue.main.async {
+                    self.onOpenThermal?()
+                }
+            }
+            completionHandler()
+            return
+        }
+
         let taskID = response.notification.request.content.userInfo["taskID"] as? String
         if response.actionIdentifier == Self.markDoneActionID, let id = taskID {
             DispatchQueue.main.async {

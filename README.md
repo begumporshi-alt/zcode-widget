@@ -6,7 +6,7 @@ A floating macOS dashboard panel for ZCode: token usage stats, searchable skill/
 
 ## Features
 
-- **Floating always-on-top panel** that lives in the macOS menu bar, with a scrollable sidebar (8 sections) — ⌘1…⌘8 jump straight to a section. Drag the grip in the bottom-right corner to resize (440×560pt default, minimum 360×480); position and size are remembered between launches
+- **Floating always-on-top panel** that lives in the macOS menu bar, with a scrollable sidebar (9 sections) — ⌘1…⌘9 jump straight to a section. Drag the grip in the bottom-right corner to resize (440×560pt default, minimum 360×480); position and size are remembered between launches
 - **Tokens tab** — token usage stats from `~/.zcode/cli/db/db.sqlite`, 7-day bar chart, usage streak, recent turns list
 - **Skills tab** — searchable picker of `~/.zcode/skills/` with copy-to-clipboard for slash commands
 - **Plugins tab** — searchable picker with copy-to-clipboard
@@ -15,6 +15,7 @@ A floating macOS dashboard panel for ZCode: token usage stats, searchable skill/
 - **Prompts tab** — LLM-powered prompt enhancer (uses your configured ZCode providers) and a prompt library with curated built-ins plus your own saved prompts
 - **Database tab** — per-project database dashboard: auto-discovers the projects you work on in ZCode, then inventories each project's migrations, tables & columns (with RLS badges), row-level security policies, functions, triggers, connection hints (key names only — values are never read), and architecture/blueprint notes from ZCode memories + in-repo docs
 - **Tasks tab** — personal task manager with reminders: tasks with due dates & times, priorities and notes; macOS notification at the due time (with a **Mark Done** action), due-soon badge on the sidebar and menu-bar tooltip, and quick access to due tasks from the Z icon's right-click menu
+- **Thermal tab** — macOS heat monitor & management: watches the OS's own thermal pressure (raw °C sensors need admin rights on Apple Silicon, so the widget reads `ProcessInfo.thermalState` + live per-process CPU instead), shows the heaviest processes, and records heat alerts that name the hot process **and the ZCode chat that was active** when the machine heated up. When it gets hot: a notification banner (tap → opens the Thermal tab), a red flame badge on the sidebar, an in-widget alerts history (`~/.zcode/widget-thermal.json`), and cool-down helpers (Activity Monitor, open the hot chat's project folder). Detection runs even while the panel is hidden
 - **Menu bar glance** — the Z icon shows today's token usage, turning red when you pass your daily budget (set in Settings); left-click toggles the panel, right-click shows a menu
 - **Activity ticker** — live strip at the bottom showing the latest model calls as they land
 - **Live updates** via FSEvents watcher on `~/.zcode/log/token-tail.jsonl`
@@ -61,7 +62,7 @@ open build/Build/Products/Release/ZCodeWidget.app
 | Action | How |
 |---|---|
 | Toggle panel | Click the **Z** icon in the menu bar (left-click), or run `zcode-widget` |
-| Jump to a section | Click a sidebar item, or press **⌘1…⌘8** (Tokens…Tasks) |
+| Jump to a section | Click a sidebar item, or press **⌘1…⌘9** (Tokens…Thermal) |
 | Open menu | Right-click the **Z** icon → Show / Hide / Quit |
 | Hide panel | Click **−** in the footer |
 | Copy slash command | Tap a skill/plugin in its tab |
@@ -70,6 +71,7 @@ open build/Build/Products/Release/ZCodeWidget.app
 | Track a project's database | **Database** tab → **+** to add any folder |
 | Add a task | **Tasks** tab → **New** → type a title, optionally set a due date/time (reminders go on at the due time) |
 | See due tasks | **Z** icon right-click menu lists tasks due within 24 h; click one to open the Tasks tab |
+| See if the Mac is hot | **Thermal** tab shows live status + heaviest processes; when macOS reports serious/critical pressure a banner names the hot process and the chat that was active, and the sidebar shows a red flame |
 | Move panel | Drag anywhere on the panel (position is remembered) |
 | Resize panel | Drag the **corner grip** (bottom-right, next to the ticker) — minimum 360×480, size is remembered |
 
@@ -82,6 +84,13 @@ A lightweight task list with due-time reminders that live in `~/.zcode/widget-ta
 - **Overdue handling** — rows show relative due times and turn red when overdue; a task saved already-overdue reminds immediately. Stale overdue tasks are never re-announced after a relaunch.
 - **Badges & glance** — the sidebar shows a red count of tasks due within 24 h; the **Z** icon's tooltip and right-click menu list due tasks
 - **Organizing** — tap the circle to complete (moves to the collapsible **Completed** section, tap again to reopen), tap a row to edit, trash to delete
+
+### The Thermal tab
+
+- **Status** — the current macOS thermal state (Cool / Warm / Hot / Critical) from `ProcessInfo.thermalState` (raw °C needs admin rights on Apple Silicon — macOS 15 returns SMC "key not found" for every key from a normal process, so the widget deliberately uses the OS's own thermal signal + live CPU instead), sampled every 8 s
+- **Heaviest processes** — real current CPU% per process (`top -l 2`, two 1-second passes), refreshed every ~16 s; ZCode-related processes get a tag
+- **Heat alerts** — when pressure reaches serious/critical, or the machine sustains *fair* pressure ≥ 24 s under heavy CPU, an event is recorded naming the hot process and the chat session that was active in `~/.zcode/log/token-tail.jsonl` at that moment (session titles come from the ZCode database, read-only). Events persist to `~/.zcode/widget-thermal.json` (last 50); alerts banner only every 10 minutes per episode and notification permission is asked lazily on the first event
+- **Management** — when hot: notification banner (tap → Thermal tab), red flame badge in the sidebar + Z-icon menu entry, and a cool-down card with one-click **Activity Monitor** / **open the hot chat's project** helpers
 
 ### The Providers tab
 
