@@ -15,6 +15,14 @@ final class CaptureRecorder: NSObject, ObservableObject {
 
     @Published private(set) var isRecording = false
     @Published private(set) var isCapturing = false
+    /// Live Screen Recording permission, polled every 2 s. A plain computed
+    /// property would only be re-read when some OTHER state re-renders the
+    /// view — with an empty gallery and disabled capture buttons nothing else
+    /// re-renders, so a grant made after launch never cleared the card.
+    @Published private(set) var isAuthorized = CGPreflightScreenCaptureAccess()
+    /// The grant arrived while this process was already running — macOS only
+    /// activates Screen Recording on (re)launch, so captures need a relaunch.
+    @Published private(set) var grantedWhileRunning = false
 
     /// Called on the main thread so the app can hide/show the floating panel.
     var setPanelHidden: ((Bool) -> Void)?
@@ -30,12 +38,33 @@ final class CaptureRecorder: NSObject, ObservableObject {
 
     private override init() {
         super.init()
+        let authorizedAtLaunch = isAuthorized
+        Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
+            guard let self, Thread.isMainThread else { return }
+            let now = CGPreflightScreenCaptureAccess()
+            if now != self.isAuthorized {
+                self.isAuthorized = now
+                if now && !authorizedAtLaunch {
+                    self.grantedWhileRunning = true
+                }
+            }
+        }
     }
-
-    var isAuthorized: Bool { CGPreflightScreenCaptureAccess() }
 
     func requestAccess() {
         _ = CGRequestScreenCaptureAccess()
+        isAuthorized = CGPreflightScreenCaptureAccess()
+    }
+
+    /// Quits and reopens the widget — required after a mid-session Screen
+    /// Recording grant (macOS activates the permission on app launch).
+    static func relaunchApp() {
+        let bundlePath = Bundle.main.bundleURL.path
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/sh")
+        process.arguments = ["-c", "sleep 1; open \"\(bundlePath)\""]
+        try? process.run()
+        NSApp.terminate(nil)
     }
 
     // MARK: Stills

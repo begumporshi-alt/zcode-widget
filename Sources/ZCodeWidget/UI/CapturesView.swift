@@ -30,6 +30,9 @@ struct CapturesView: View {
                 if !recorder.isAuthorized {
                     permissionCard
                 }
+                if recorder.grantedWhileRunning {
+                    relaunchCard
+                }
                 captureBar
                 if recorder.isRecording {
                     Text("Recording — the widget hid itself so it stays out of the video. Stop it here or from the menu-bar icon.")
@@ -78,7 +81,7 @@ struct CapturesView: View {
             Label("Screen Recording permission needed", systemImage: "shield.lefthalf.filled")
                 .font(.system(size: 11.5, weight: .semibold))
                 .foregroundStyle(Color.orange)
-            Text("Captures need macOS Screen Recording permission — without it the widget can only photograph its own panel. Grant it once (macOS may ask for your Touch ID or password), then quit and relaunch the widget from the menu bar (Z icon → Quit).")
+            Text("Captures need macOS Screen Recording permission — without it the widget can only photograph its own panel. Grant it for ZCodeWidget (Touch ID or your password may be asked). If ZCodeWidget already shows ON in that list but this card stays, toggle it OFF and back ON — every newly built widget needs a fresh grant. Afterwards quit & relaunch the widget so the grant takes effect.")
                 .font(.system(size: 10.5))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -106,7 +109,49 @@ struct CapturesView: View {
                 .padding(.vertical, 5)
                 .background(Color.accentColor.opacity(0.14))
                 .cornerRadius(6)
+
+                Button {
+                    CaptureRecorder.relaunchApp()
+                } label: {
+                    Label("Relaunch", systemImage: "arrow.clockwise")
+                        .font(.system(size: 10.5, weight: .medium))
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, 9)
+                .padding(.vertical, 5)
+                .background(Color.secondary.opacity(0.12))
+                .cornerRadius(6)
+                .help("Quit and reopen the widget (needed after granting)")
             }
+        }
+        .padding(10)
+        .background(Color.orange.opacity(0.08))
+        .cornerRadius(8)
+    }
+
+    /// Shown when the grant arrives while the widget is already running:
+    /// macOS activates Screen Recording only on launch, so a relaunch is
+    /// needed before captures produce anything.
+    private var relaunchCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label("Permission granted — relaunch to activate", systemImage: "arrow.triangle.2.circlepath")
+                .font(.system(size: 11.5, weight: .semibold))
+                .foregroundStyle(Color.orange)
+            Text("Screen Recording was just enabled while the widget was running. macOS only applies it on launch — quit & reopen the widget before capturing.")
+                .font(.system(size: 10.5))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Button {
+                CaptureRecorder.relaunchApp()
+            } label: {
+                Label("Relaunch now", systemImage: "arrow.clockwise")
+                    .font(.system(size: 10.5, weight: .medium))
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal, 9)
+            .padding(.vertical, 5)
+            .background(Color.accentColor.opacity(0.14))
+            .cornerRadius(6)
         }
         .padding(10)
         .background(Color.orange.opacity(0.08))
