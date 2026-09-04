@@ -23,6 +23,11 @@ final class CaptureRecorder: NSObject, ObservableObject {
     /// The grant arrived while this process was already running — macOS only
     /// activates Screen Recording on (re)launch, so captures need a relaunch.
     @Published private(set) var grantedWhileRunning = false
+    /// Baking the privacy blur into a finished recording (post-processing).
+    @Published private(set) var isProcessingBlur = false
+    @Published private(set) var processingProgress: Double?
+    /// View-facing notice shown as a toast by CapturesView (consumed on read).
+    @Published private(set) var pendingNotice: String?
 
     /// Called on the main thread so the app can hide/show the floating panel.
     var setPanelHidden: ((Bool) -> Void)?
@@ -35,6 +40,12 @@ final class CaptureRecorder: NSObject, ObservableObject {
     private let sessionQueue = DispatchQueue(label: "zcode-widget.recording")
     private var session: AVCaptureSession?
     private let movieOutput = AVCaptureMovieFileOutput()
+    /// Set when a recording starts (main thread) and read when it finishes
+    /// (session queue): the final gallery URL and the blur settings to bake
+    /// in, if any. With blur active the session records to a hidden raw file
+    /// (.rec-raw-…, skipped by rescan) which is deleted after processing.
+    private var pendingFinalURL: URL?
+    private var pendingBlur: CaptureOptionsStore.BlurSnapshot?
 
     private override init() {
         super.init()
@@ -72,17 +83,19 @@ final class CaptureRecorder: NSObject, ObservableObject {
     /// Captures and saves a PNG into the captures folder; the panel is hidden
     /// around the shot. `completion` runs on the main thread with the file URL,
     /// or nil when the capture failed / permission is missing.
+    @MainActor
     func capture(_ mode: Mode, completion: @escaping (URL?) -> Void) {
         guard isAuthorized else {
             completion(nil)
             return
         }
+        let blur = CaptureOptionsStore.shared.blurSnapshot()
         isCapturing = true
         setPanelHidden?(true)
         // Give the panel a beat to leave the screen before the window list is
         // read, so the widget never appears in its own capture.
         captureQueue.asyncAfter(deadline: .now() + 0.2) {
-            let url = Self.performStillCapture(mode)
+            let url = Self.performStillCapture(mode, blur: blur)
             DispatchQueue.main.async {
                 Task { @MainActor in
                     self.isCapturing = false
@@ -94,23 +107,67 @@ final class CaptureRecorder: NSObject, ObservableObject {
         }
     }
 
-    private nonisolated static func performStillCapture(_ mode: Mode) -> URL? {
-        let target = Self.captureTarget()
-        let image: CGImage?
+    /// Grabs a full-screen reference image for the privacy-area editor —
+    /// in memory only, never written to disk (it may contain exactly the
+    /// sensitive content the areas are meant to hide).
+    @MainActor
+    func captureReference(completion: @escaping (NSImage?) -> Void) {
+        guard isAuthorized else {
+            completion(nil)
+            return
+        }
+        isCapturing = true
+        setPanelHidden?(true)
+        captureQueue.asyncAfter(deadline: .now() + 0.2) {
+            let target = Self.captureTarget()
+            let image = Self.captureImage(.chatScreen, target: target)
+            DispatchQueue.main.async {
+                Task { @MainActor in
+                    self.isCapturing = false
+                    self.setPanelHidden?(false)
+                    completion(image.map { NSImage(cgImage: $0, size: NSSize(width: $0.width, height: $0.height)) })
+                }
+            }
+        }
+    }
+
+    private nonisolated static func captureImage(_ mode: Mode, target: CaptureTarget) -> CGImage? {
         switch mode {
         case .chatScreen:
-            image = CGWindowListCreateImage(target.displayBounds,
-                                            .optionOnScreenOnly,
-                                            kCGNullWindowID,
-                                            [.bestResolution])
+            return CGWindowListCreateImage(target.displayBounds,
+                                           .optionOnScreenOnly,
+                                           kCGNullWindowID,
+                                           [.bestResolution])
         case .chatWindow:
             guard let windowID = target.windowID else { return nil }
-            image = CGWindowListCreateImage(target.windowBounds,
-                                            .optionIncludingWindow,
-                                            windowID,
-                                            [.bestResolution, .boundsIgnoreFraming])
+            return CGWindowListCreateImage(target.windowBounds,
+                                           .optionIncludingWindow,
+                                           windowID,
+                                           [.bestResolution, .boundsIgnoreFraming])
         }
-        guard let image else { return nil }
+    }
+
+    private nonisolated static func performStillCapture(_ mode: Mode,
+                                                        blur: CaptureOptionsStore.BlurSnapshot?) -> URL? {
+        let target = Self.captureTarget()
+        guard let captured = Self.captureImage(mode, target: target) else { return nil }
+        var image = captured
+        // Privacy blur: redact in memory BEFORE anything hits disk, so no
+        // unredacted original is ever written.
+        if let blur {
+            let regions: [CGRect]
+            switch mode {
+            case .chatScreen:
+                regions = blur.pixelRegions(forFullScreen: CGSize(width: captured.width, height: captured.height))
+            case .chatWindow:
+                regions = blur.pixelRegions(forWindow: target.windowBounds,
+                                            displayBounds: target.displayBounds,
+                                            imageSize: CGSize(width: captured.width, height: captured.height))
+            }
+            if let redacted = PrivacyRedactor.redact(captured, regions: regions, style: blur.style) {
+                image = redacted
+            }
+        }
         let rep = NSBitmapImageRep(cgImage: image)
         guard let data = rep.representation(using: .png, properties: [:]) else { return nil }
         let url = CaptureStore.makeFileURL(kind: .image)
@@ -124,14 +181,22 @@ final class CaptureRecorder: NSObject, ObservableObject {
 
     // MARK: Recording
 
-    func startRecording() {
+    @MainActor
+    func startRecording(includeAudio: Bool) {
         guard !isRecording, isAuthorized else { return }
         let target = Self.captureTarget()
-        let url = CaptureStore.makeFileURL(kind: .video)
+        let blur = CaptureOptionsStore.shared.blurSnapshot()
+        let finalURL = CaptureStore.makeFileURL(kind: .video)
+        // With blur active the session records to a hidden raw file first
+        // (dot-prefixed files are skipped by rescan); the redacted export
+        // takes the final name and the raw is hard-deleted afterwards.
+        let recordURL = blur != nil ? CaptureStore.makeHiddenRawURL() : finalURL
+        pendingFinalURL = finalURL
+        pendingBlur = blur
         setRecording(true)
         setPanelHidden?(true)
         sessionQueue.async { [self] in
-            beginRecording(displayID: target.displayID, outputURL: url)
+            beginRecording(displayID: target.displayID, outputURL: recordURL, includeAudio: includeAudio)
         }
     }
 
@@ -146,7 +211,7 @@ final class CaptureRecorder: NSObject, ObservableObject {
         }
     }
 
-    private func beginRecording(displayID: CGDirectDisplayID, outputURL: URL) {
+    private func beginRecording(displayID: CGDirectDisplayID, outputURL: URL, includeAudio: Bool) {
         let newSession = AVCaptureSession()
         guard let input = AVCaptureScreenInput(displayID: displayID) else {
             finishRecording(url: nil)
@@ -157,6 +222,15 @@ final class CaptureRecorder: NSObject, ObservableObject {
             return
         }
         newSession.addInput(input)
+        if includeAudio {
+            // Voice-over narration: mic input is best-effort — a missing or
+            // denied microphone must never kill the screen recording.
+            if let mic = AVCaptureDevice.default(for: .audio),
+               let micInput = try? AVCaptureDeviceInput(device: mic),
+               newSession.canAddInput(micInput) {
+                newSession.addInput(micInput)
+            }
+        }
         newSession.addOutput(movieOutput)
         // Note: AVCaptureConnection.videoSettings is iOS-only; on macOS the
         // movie output encodes with its own defaults (H.264 at screen size).
@@ -178,6 +252,8 @@ final class CaptureRecorder: NSObject, ObservableObject {
     }
 
     private func finishRecording(url: URL?) {
+        pendingBlur = nil
+        pendingFinalURL = nil
         if let url, !FileManager.default.fileExists(atPath: url.path) {
             finishRecording(url: nil)
             return
@@ -190,6 +266,64 @@ final class CaptureRecorder: NSObject, ObservableObject {
                 self.onRecordingFinished?(url)
             }
         }
+    }
+
+    /// Bakes the privacy blur into a raw recording: export → final URL →
+    /// hard-delete the unblurred raw. The recording state clears immediately
+    /// (REC dot off, panel back); `onRecordingFinished` fires only once the
+    /// redacted file is ready.
+    private func processRawRecording(_ rawURL: URL,
+                                     finalURL: URL,
+                                     blur: CaptureOptionsStore.BlurSnapshot) {
+        DispatchQueue.main.async {
+            Task { @MainActor in
+                self.setRecording(false)
+                self.setPanelHidden?(false)
+                self.isProcessingBlur = true
+                self.processingProgress = 0
+            }
+        }
+        Task<Void, Never> {
+            let blurFailed: Bool
+            do {
+                try await PrivacyRedactor.processVideo(at: rawURL,
+                                                        outputURL: finalURL,
+                                                        normalizedRegions: blur.normalizedRegions,
+                                                        style: blur.style) { progress in
+                    Task { @MainActor in
+                        self.processingProgress = progress
+                    }
+                }
+                blurFailed = false
+            } catch {
+                blurFailed = true
+            }
+            if blurFailed {
+                // Keep the recording (the user can delete it) rather than
+                // lose it — but say loudly that it is NOT redacted.
+                try? FileManager.default.removeItem(at: finalURL)
+                try? FileManager.default.moveItem(at: rawURL, to: finalURL)
+            } else {
+                try? FileManager.default.removeItem(at: rawURL)
+            }
+            await MainActor.run {
+                self.isProcessingBlur = false
+                self.processingProgress = nil
+                if blurFailed {
+                    self.pendingNotice = "Blur processing failed — recording saved WITHOUT blur"
+                }
+                CaptureStore.shared.rescan()
+                self.onRecordingFinished?(finalURL)
+            }
+        }
+    }
+
+    /// Returns (and clears) a pending view-facing notice.
+    @MainActor
+    func consumeNotice() -> String? {
+        let notice = pendingNotice
+        pendingNotice = nil
+        return notice
     }
 
     private func setRecording(_ recording: Bool) {
@@ -270,14 +404,26 @@ extension CaptureRecorder: AVCaptureFileOutputRecordingDelegate {
                     didFinishRecordingTo outputFileURL: URL,
                     from connections: [AVCaptureConnection],
                     error: Error?) {
-        if error != nil {
+        let failed = (error != nil)
+        if failed {
             // Partial/failed recording — drop the file rather than show garbage.
             try? FileManager.default.removeItem(at: outputFileURL)
         }
         sessionQueue.async { [weak self] in
-            self?.session?.stopRunning()
-            self?.session = nil
+            guard let self else { return }
+            self.session?.stopRunning()
+            self.session = nil
+            let blur = self.pendingBlur
+            let finalURL = self.pendingFinalURL
+            self.pendingBlur = nil
+            self.pendingFinalURL = nil
+            if failed {
+                self.finishRecording(url: nil)
+            } else if let blur, let finalURL {
+                self.processRawRecording(outputFileURL, finalURL: finalURL, blur: blur)
+            } else {
+                self.finishRecording(url: outputFileURL)
+            }
         }
-        finishRecording(url: error == nil ? outputFileURL : nil)
     }
 }

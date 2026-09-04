@@ -16,7 +16,7 @@ A floating macOS dashboard panel for ZCode: token usage stats, searchable skill/
 - **Database tab** — per-project database dashboard: auto-discovers the projects you work on in ZCode, then inventories each project's migrations, tables & columns (with RLS badges), row-level security policies, functions, triggers, connection hints (key names only — values are never read), and architecture/blueprint notes from ZCode memories + in-repo docs
 - **Tasks tab** — personal task manager with reminders: tasks with due dates & times, priorities and notes; macOS notification at the due time (with a **Mark Done** action), due-soon badge on the sidebar and menu-bar tooltip, and quick access to due tasks from the Z icon's right-click menu
 - **Thermal tab** — macOS heat monitor & management: watches the OS's own thermal pressure (raw °C sensors need admin rights on Apple Silicon, so the widget reads `ProcessInfo.thermalState` + live per-process CPU instead), shows the heaviest processes, and records heat alerts that name the hot process **and the ZCode chat that was active** when the machine heated up. When it gets hot: a notification banner (tap → opens the Thermal tab), a red flame badge on the sidebar, an in-widget alerts history (`~/.zcode/widget-thermal.json`), and cool-down helpers (Activity Monitor, open the hot chat's project folder). Detection runs even while the panel is hidden
-- **Captures tab** — screenshots & screen recordings with an in-widget gallery: **Screen** captures the display the ZCode chat is on, **Window** captures just the chat window, **Record** records the display until you press Stop (the widget hides itself so it never appears in its own captures; the menu-bar icon shows a red dot while recording and its right-click menu can stop it). Every capture lands in `~/.zcode/captures/` with a thumbnail grid, image/video previews, duration chips, Copy / Reveal / Delete, and **Send to chat** — writes the screenshot into a chosen ZCode chat's own input queue (the same one the ZCode UI uses), falling back to copy-to-clipboard if ZCode doesn't pick it up within ~20 s. Needs macOS Screen Recording permission once (Settings → Privacy & Security → Screen & System Audio Recording → ZCodeWidget; macOS may ask for Touch ID/password, and the widget should be quit & reopened after granting — note each rebuilt binary needs the grant again)
+- **Captures tab** — screenshots & screen recordings with an in-widget gallery: **Screen** captures the display the ZCode chat is on, **Window** captures just the chat window, **Record** records the display until you press Stop (the widget hides itself so it never appears in its own captures; the menu-bar icon shows a red dot while recording and its right-click menu can stop it). Every capture lands in `~/.zcode/captures/` with a thumbnail grid, image/video previews, duration chips, Copy / Reveal / Delete, and **Send to chat** — writes the screenshot into a chosen ZCode chat's own input queue (the same one the ZCode UI uses), falling back to copy-to-clipboard if ZCode doesn't pick it up within ~20 s. Two optional privacy/audio features: **blur sensitive areas** (draw boxes once; every screenshot and recording gets them redacted — blur or pixelate, unblurred originals are never kept) and **voice-over narration** (records your microphone alongside the screen). Needs macOS Screen Recording permission once (Settings → Privacy & Security → Screen & System Audio Recording → ZCodeWidget; macOS may ask for Touch ID/password, and the widget should be quit & reopened after granting — note each rebuilt binary needs the grant again)
 - **Menu bar glance** — the Z icon shows today's token usage, turning red when you pass your daily budget (set in Settings); left-click toggles the panel, right-click shows a menu
 - **Activity ticker** — live strip at the bottom showing the latest model calls as they land
 - **Live updates** via FSEvents watcher on `~/.zcode/log/token-tail.jsonl`
@@ -76,6 +76,8 @@ open build/Build/Products/Release/ZCodeWidget.app
 | Take a screenshot | **Captures** tab → **Screen** (whole display the ZCode chat is on) or **Window** (chat window only) |
 | Record the screen | **Captures** tab → **Record**, then **Stop** (or the Z icon's right-click menu); files land in `~/.zcode/captures/` |
 | Send a capture to a chat | **Captures** tab → select a screenshot → **Send to chat** (pick the target chat next to the button) |
+| Blur sensitive info | **Captures** tab → enable **Blur sensitive areas** → **Edit areas…** → drag boxes over anything sensitive (choose Blur or Pixelate) |
+| Record with narration | **Captures** tab → enable **Voice-over narration (microphone)** → **Record** (asks for mic permission the first time) |
 | Move panel | Drag anywhere on the panel (position is remembered) |
 | Resize panel | Drag the **corner grip** (bottom-right, next to the ticker) — minimum 360×480, size is remembered |
 
@@ -100,7 +102,9 @@ A lightweight task list with due-time reminders that live in `~/.zcode/widget-ta
 
 Screenshots & screen recordings you can browse, preview, and send into a live ZCode chat:
 
-- **Capture** — **Screen** photographs the whole display the ZCode chat window is on; **Window** photographs just that window (auto-cropped). **Record** records the display until you press **Stop** — the widget hides its panel first so it never shows up in its own captures, the menu-bar icon shows a red dot while recording, and its right-click menu gains a **⏹ Stop screen recording** item. Recordings are H.264 `.mov` files, silent.
+- **Capture** — **Screen** photographs the whole display the ZCode chat window is on; **Window** photographs just that window (auto-cropped). **Record** records the display until you press **Stop** — the widget hides its panel first so it never shows up in its own captures, the menu-bar icon shows a red dot while recording, and its right-click menu gains a **⏹ Stop screen recording** item. Recordings are H.264 `.mov` files.
+- **Privacy blur** *(optional, off by default)* — enable **Blur sensitive areas**, then **Edit areas…** takes a one-time reference screenshot (in memory only) on which you drag boxes over anything sensitive — a credentials panel, an open password manager, your chat input. Boxes are remembered in `~/.zcode/widget-capture-settings.json` and redacted from every screenshot and recording of that screen, in your choice of **Blur** or **Pixelate** style. Screenshots are redacted in memory before anything is written to disk; recordings are post-processed after Stop (a progress row shows the export) and the unblurred raw file is hard-deleted — **unblurred originals are never kept**. Boxes are fixed to the screen, not to windows: if you move a window, drag its box along too. On the rare failure the recording is kept unblurred with a loud "saved WITHOUT blur" warning so you can delete it.
+- **Voice-over narration** *(optional, off by default)* — enable **Voice-over narration (microphone)** and recordings capture your mic alongside the screen. macOS asks for microphone permission the first time (Settings → Privacy & Security → Microphone); if it's denied the hint turns amber with a deep link, and recordings continue silent rather than failing.
 - **Gallery** — every capture lands in `~/.zcode/captures/` (`shot-<timestamp>.png` / `rec-<timestamp>.mov`) and appears in a thumbnail grid with duration chips on videos; select one to preview it (images full-size, videos play inline) with its date, size and actions: **Copy**, **Reveal** in Finder, **Delete** (to Trash), and **Send to chat**.
 - **Send to chat** — for screenshots only: the button next to a chat picker (newest live chats first) writes the image into that chat's own `session_input` queue in `~/.zcode/cli/db/db.sqlite` — the same channel the ZCode UI itself uses, mirrored field-for-field from a real message. ZCode promotes it within a few seconds; if it doesn't (the mechanism is internal and unverified for outside writers), the widget copies the image instead and says so. Nothing is ever sent automatically — only when you click **Send to chat**. Videos can't be auto-sent; **Copy video** puts the file on your clipboard to attach manually.
 - **Permission** — first use needs macOS Screen Recording permission (Settings → Privacy & Security → Screen & System Audio Recording → ZCodeWidget). The widget explains this on the tab and deep-links to the right pane; macOS may ask for your Touch ID/password, and the widget should be quit & reopened afterwards. Because the widget is ad-hoc signed, a newly built/reinstalled binary needs the grant once more.
@@ -185,7 +189,9 @@ zcode-widget/
 │   │   ├── WidgetSettingsStore.swift # Daily budget + pinned folders (~/.zcode/widget-settings.json)
 │   │   ├── ThermalMonitor.swift      # Thermal pressure + CPU sampling, heat alerts
 │   │   ├── CaptureStore.swift        # ~/.zcode/captures library (scan, thumbs, durations)
-│   │   ├── CaptureRecorder.swift     # Screenshot + screen-recording engine (TCC-gated)
+│   │   ├── CaptureRecorder.swift     # Screenshot + screen-recording engine (TCC-gated, mic voice-over)
+│   │   ├── CaptureOptionsStore.swift # Blur + voice-over toggles & areas (~/.zcode/widget-capture-settings.json)
+│   │   ├── PrivacyRedactor.swift     # Blur/pixelate redaction for stills + video export pipeline
 │   │   ├── ChatSender.swift          # Send-to-chat via the session_input queue + clipboard fallback
 │   │   └── ActivityTicker.swift    # Latest-call ticker state
 │   ├── Database/
@@ -205,7 +211,8 @@ zcode-widget/
 │   │   ├── DatabaseView.swift   # Per-project database dashboard
 │   │   ├── TasksView.swift      # Task list + editor (due dates, priorities)
 │   │   ├── ThermalView.swift    # Heat status, cool-down helpers, alerts history
-│   │   ├── CapturesView.swift   # Capture bar, gallery, previews, send-to-chat
+│   │   ├── CapturesView.swift   # Capture bar, privacy & voice-over options, gallery, send-to-chat
+│   │   ├── PrivacyAreaEditorSheet.swift # Draw blur areas on an in-memory reference screenshot
 │   │   ├── SettingsView.swift   # Settings sheet (daily budget)
 │   │   ├── ActivityTickerBar.swift  # Live bottom ticker strip
 │   │   └── ToastView.swift      # Copy-to-clipboard feedback toast
@@ -228,7 +235,7 @@ Note: `started_at` is stored as **INTEGER milliseconds** since Unix epoch (not I
 ## Notes
 
 - The app is a background accessory (`LSUIElement = true`), so it won't appear in the Dock — look for the **Z** icon in the menu bar.
-- All data paths are read from the current user's home directory; the widget never writes anywhere except provider-config edits (with backup) in `~/.zcode/v2/`, its own task file in `~/.zcode/widget-tasks.json`, and the captures folder `~/.zcode/captures/` (plus the rare user-clicked **Send to chat** queue insert in `~/.zcode/cli/db/db.sqlite`).
+- All data paths are read from the current user's home directory; the widget never writes anywhere except provider-config edits (with backup) in `~/.zcode/v2/`, its own task file in `~/.zcode/widget-tasks.json`, the capture-options file `~/.zcode/widget-capture-settings.json`, and the captures folder `~/.zcode/captures/` (plus the rare user-clicked **Send to chat** queue insert in `~/.zcode/cli/db/db.sqlite`).
 
 ## License
 

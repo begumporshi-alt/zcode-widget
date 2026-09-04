@@ -95,6 +95,25 @@ final class CaptureStore: ObservableObject {
         return url
     }
 
+    /// Hidden raw-recording URL (dot-prefixed). rescan skips hidden files, so
+    /// an unredacted raw recording never shows in the gallery; the recorder
+    /// deletes it once the redacted export has taken the final name.
+    nonisolated static func makeHiddenRawURL() -> URL {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyyMMdd-HHmmss"
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        let stamp = formatter.string(from: Date())
+        var url = URL(fileURLWithPath: CapturePaths.folderPath)
+            .appendingPathComponent(".rec-raw-\(stamp).mov")
+        var n = 2
+        while FileManager.default.fileExists(atPath: url.path) {
+            url = URL(fileURLWithPath: CapturePaths.folderPath)
+                .appendingPathComponent(".rec-raw-\(stamp)-\(n).mov")
+            n += 1
+        }
+        return url
+    }
+
     // MARK: Thumbnails, previews & durations
 
     func thumbnail(for item: CaptureItem) async -> NSImage? {

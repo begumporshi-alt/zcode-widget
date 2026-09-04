@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import AVFoundation
 import AVKit
 
 /// Captures tab — screenshots & screen recordings with an in-widget gallery.
@@ -8,6 +9,7 @@ import AVKit
 struct CapturesView: View {
     @ObservedObject private var store = CaptureStore.shared
     @ObservedObject private var recorder = CaptureRecorder.shared
+    @ObservedObject private var options = CaptureOptionsStore.shared
 
     @State private var selectedItem: CaptureStore.CaptureItem?
     @State private var previewImage: NSImage?
@@ -16,6 +18,9 @@ struct CapturesView: View {
     @State private var targets: [ChatSender.ChatTarget] = []
     @State private var targetSessionID: String?
     @State private var toastMessage: String?
+    @State private var showAreaEditor = false
+    @State private var editorReference: NSImage?
+    @State private var micStatus: AVAuthorizationStatus = .notDetermined
 
     private static let timeFormatter: DateFormatter = {
         let f = DateFormatter()
@@ -40,6 +45,10 @@ struct CapturesView: View {
                         .foregroundStyle(Color.red)
                         .fixedSize(horizontal: false, vertical: true)
                 }
+                optionsSection
+                if recorder.isProcessingBlur {
+                    processingRow
+                }
                 galleryHeader
                 gallery
                 Divider()
@@ -58,6 +67,24 @@ struct CapturesView: View {
         .onAppear {
             store.rescan()
             loadTargets()
+            micStatus = AVCaptureDevice.authorizationStatus(for: .audio)
+            if let notice = recorder.consumeNotice() {
+                showToast(notice)
+            }
+        }
+        .onChange(of: recorder.pendingNotice) { notice in
+            guard let notice else { return }
+            showToast(notice)
+            _ = recorder.consumeNotice()
+        }
+        .sheet(isPresented: $showAreaEditor) {
+            if let editorReference {
+                PrivacyAreaEditorSheet(reference: editorReference,
+                                       existingRegions: options.blurRegions,
+                                       style: options.blurStyle) { regions in
+                    options.setBlurRegions(regions)
+                }
+            }
         }
         .onChange(of: recorder.isRecording) { _ in
             if !recorder.isRecording { store.rescan() }
@@ -183,7 +210,7 @@ struct CapturesView: View {
                 .buttonStyle(.plain)
             } else {
                 pillButton("Record", icon: "record.circle", tint: .red, disabled: busy || !recorder.isAuthorized) {
-                    recorder.startRecording()
+                    startRecording()
                 }
             }
             Spacer(minLength: 0)
@@ -236,6 +263,174 @@ struct CapturesView: View {
                 showToast("Screen Recording permission is needed first")
             } else {
                 showToast("Couldn't capture the screen")
+            }
+        }
+    }
+
+    // MARK: Privacy & voice-over options
+
+    private var optionsSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Privacy & audio")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.secondary)
+
+            Toggle("Blur sensitive areas", isOn: Binding(
+                get: { options.blurEnabled },
+                set: { options.setBlurEnabled($0) }
+            ))
+            .toggleStyle(.switch)
+            .controlSize(.small)
+            .font(.system(size: 11.5, weight: .medium))
+
+            if options.blurEnabled {
+                HStack(spacing: 8) {
+                    Picker("", selection: Binding(
+                        get: { options.blurStyle },
+                        set: { options.setBlurStyle($0) }
+                    )) {
+                        Text("Blur").tag(PrivacyRedactor.Style.blur)
+                        Text("Pixelate").tag(PrivacyRedactor.Style.pixelate)
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(width: 118)
+
+                    Button {
+                        openAreaEditor()
+                    } label: {
+                        Label(options.blurRegions.isEmpty ? "Edit areas…" : "Edit areas… (\(options.blurRegions.count))",
+                              systemImage: "rectangle.dashed")
+                            .font(.system(size: 10.5, weight: .medium))
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 4)
+                    .background(Color.accentColor.opacity(0.14))
+                    .cornerRadius(6)
+                    .disabled(!recorder.isAuthorized)
+                    .help("Draw boxes over anything sensitive")
+
+                    Spacer(minLength: 0)
+                }
+
+                Text(options.blurRegions.isEmpty
+                     ? "No areas yet — draw boxes over anything sensitive and every capture gets redacted there."
+                     : "Areas are redacted from all screenshots and recordings of the chat screen. Boxes stay fixed on the screen (they don't follow moved windows). Unblurred originals are never kept.")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Divider()
+
+            Toggle("Voice-over narration (microphone)", isOn: Binding(
+                get: { options.voiceOverEnabled },
+                set: { setVoiceOver($0) }
+            ))
+            .toggleStyle(.switch)
+            .controlSize(.small)
+            .font(.system(size: 11.5, weight: .medium))
+
+            if options.voiceOverEnabled {
+                micHint
+            }
+        }
+        .padding(10)
+        .background(Color.secondary.opacity(0.06))
+        .cornerRadius(8)
+    }
+
+    @ViewBuilder
+    private var micHint: some View {
+        if micStatus == .denied || micStatus == .restricted {
+            HStack(spacing: 6) {
+                Label("Microphone denied — recordings will be silent.", systemImage: "mic.slash")
+                    .font(.system(size: 10))
+                    .foregroundStyle(Color.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 0)
+                Button {
+                    NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")!)
+                } label: {
+                    Text("System Settings…")
+                        .font(.system(size: 10, weight: .medium))
+                }
+                .buttonStyle(.plain)
+            }
+        } else {
+            Text("Your mic records alongside the screen while a recording runs. macOS asks for permission the first time.")
+                .font(.system(size: 10))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var processingRow: some View {
+        HStack(spacing: 6) {
+            ProgressView()
+                .controlSize(.small)
+            Text("Applying privacy blur… \(Int((recorder.processingProgress ?? 0) * 100))%")
+                .font(.system(size: 10.5, weight: .medium))
+                .foregroundStyle(.secondary)
+            Spacer(minLength: 0)
+        }
+        .padding(8)
+        .background(Color.secondary.opacity(0.06))
+        .cornerRadius(8)
+    }
+
+    private func setVoiceOver(_ on: Bool) {
+        options.setVoiceOverEnabled(on)
+        micStatus = AVCaptureDevice.authorizationStatus(for: .audio)
+        if on, micStatus == .notDetermined {
+            // Flipping the toggle is the "allow it" moment — ask right away so
+            // the first recording already carries the narration.
+            AVCaptureDevice.requestAccess(for: .audio) { _ in
+                Task { @MainActor in
+                    micStatus = AVCaptureDevice.authorizationStatus(for: .audio)
+                }
+            }
+        }
+    }
+
+    private func startRecording() {
+        guard options.voiceOverEnabled else {
+            recorder.startRecording(includeAudio: false)
+            return
+        }
+        micStatus = AVCaptureDevice.authorizationStatus(for: .audio)
+        switch micStatus {
+        case .authorized:
+            recorder.startRecording(includeAudio: true)
+        case .notDetermined:
+            AVCaptureDevice.requestAccess(for: .audio) { granted in
+                Task { @MainActor in
+                    micStatus = AVCaptureDevice.authorizationStatus(for: .audio)
+                    if granted {
+                        recorder.startRecording(includeAudio: true)
+                    } else {
+                        showToast("Microphone denied — recording without voice-over")
+                        recorder.startRecording(includeAudio: false)
+                    }
+                }
+            }
+        default:
+            showToast("Microphone denied — recording without voice-over")
+            recorder.startRecording(includeAudio: false)
+        }
+    }
+
+    private func openAreaEditor() {
+        guard recorder.isAuthorized else { return }
+        editorReference = nil
+        // The reference shot hides the panel first, so the areas are drawn on
+        // the bare screen the user actually wants to capture.
+        recorder.captureReference { image in
+            if let image {
+                editorReference = image
+                showAreaEditor = true
+            } else {
+                showToast("Couldn't grab a reference screenshot")
             }
         }
     }
