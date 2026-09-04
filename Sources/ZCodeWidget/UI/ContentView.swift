@@ -2,7 +2,7 @@ import SwiftUI
 import AppKit
 
 enum SidebarTab: Int, CaseIterable, Identifiable {
-    case tokens, skills, plugins, providers, report, prompts, database, tasks, thermal
+    case tokens, skills, plugins, providers, report, prompts, database, tasks, thermal, captures
 
     var id: Int { rawValue }
 
@@ -17,6 +17,7 @@ enum SidebarTab: Int, CaseIterable, Identifiable {
         case .database: "Database"
         case .tasks: "Tasks"
         case .thermal: "Thermal"
+        case .captures: "Captures"
         }
     }
 
@@ -31,6 +32,7 @@ enum SidebarTab: Int, CaseIterable, Identifiable {
         case .database: "cylinder.split.1x2"
         case .tasks: "checklist"
         case .thermal: "thermometer.medium"
+        case .captures: "camera.fill"
         }
     }
 }
@@ -42,6 +44,7 @@ struct ContentView: View {
     @StateObject private var settings = WidgetSettingsStore()
     @ObservedObject private var taskStore = TaskStore.shared
     @ObservedObject private var thermalMonitor = ThermalMonitor.shared
+    @ObservedObject private var captureRecorder = CaptureRecorder.shared
     @State private var showSettings = false
 
     var body: some View {
@@ -193,6 +196,20 @@ struct ContentView: View {
                     } else {
                         Spacer(minLength: 0)
                     }
+                } else if tab == .captures {
+                    if captureRecorder.isRecording {
+                        ZStack {
+                            Circle()
+                                .fill(Color.red)
+                            Image(systemName: "record.circle")
+                                .font(.system(size: 7, weight: .bold))
+                                .foregroundStyle(.white)
+                        }
+                        .frame(width: 15, height: 15)
+                        .help("Recording — open Captures")
+                    } else {
+                        Spacer(minLength: 0)
+                    }
                 } else {
                     Spacer(minLength: 0)
                 }
@@ -228,6 +245,7 @@ struct ContentView: View {
             case .database: DatabaseView()
             case .tasks: TasksView()
             case .thermal: ThermalView()
+            case .captures: CapturesView()
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

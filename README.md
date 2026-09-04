@@ -6,7 +6,7 @@ A floating macOS dashboard panel for ZCode: token usage stats, searchable skill/
 
 ## Features
 
-- **Floating always-on-top panel** that lives in the macOS menu bar, with a scrollable sidebar (9 sections) — ⌘1…⌘9 jump straight to a section. Drag the grip in the bottom-right corner to resize (440×560pt default, minimum 360×480); position and size are remembered between launches
+- **Floating always-on-top panel** that lives in the macOS menu bar, with a scrollable sidebar (10 sections) — ⌘1…⌘9 / ⌘0 jump straight to a section. Drag the grip in the bottom-right corner to resize (440×560pt default, minimum 360×480); position and size are remembered between launches
 - **Tokens tab** — token usage stats from `~/.zcode/cli/db/db.sqlite`, 7-day bar chart, usage streak, recent turns list
 - **Skills tab** — searchable picker of `~/.zcode/skills/` with copy-to-clipboard for slash commands
 - **Plugins tab** — searchable picker with copy-to-clipboard
@@ -16,6 +16,7 @@ A floating macOS dashboard panel for ZCode: token usage stats, searchable skill/
 - **Database tab** — per-project database dashboard: auto-discovers the projects you work on in ZCode, then inventories each project's migrations, tables & columns (with RLS badges), row-level security policies, functions, triggers, connection hints (key names only — values are never read), and architecture/blueprint notes from ZCode memories + in-repo docs
 - **Tasks tab** — personal task manager with reminders: tasks with due dates & times, priorities and notes; macOS notification at the due time (with a **Mark Done** action), due-soon badge on the sidebar and menu-bar tooltip, and quick access to due tasks from the Z icon's right-click menu
 - **Thermal tab** — macOS heat monitor & management: watches the OS's own thermal pressure (raw °C sensors need admin rights on Apple Silicon, so the widget reads `ProcessInfo.thermalState` + live per-process CPU instead), shows the heaviest processes, and records heat alerts that name the hot process **and the ZCode chat that was active** when the machine heated up. When it gets hot: a notification banner (tap → opens the Thermal tab), a red flame badge on the sidebar, an in-widget alerts history (`~/.zcode/widget-thermal.json`), and cool-down helpers (Activity Monitor, open the hot chat's project folder). Detection runs even while the panel is hidden
+- **Captures tab** — screenshots & screen recordings with an in-widget gallery: **Screen** captures the display the ZCode chat is on, **Window** captures just the chat window, **Record** records the display until you press Stop (the widget hides itself so it never appears in its own captures; the menu-bar icon shows a red dot while recording and its right-click menu can stop it). Every capture lands in `~/.zcode/captures/` with a thumbnail grid, image/video previews, duration chips, Copy / Reveal / Delete, and **Send to chat** — writes the screenshot into a chosen ZCode chat's own input queue (the same one the ZCode UI uses), falling back to copy-to-clipboard if ZCode doesn't pick it up within ~20 s. Needs macOS Screen Recording permission once (Settings → Privacy & Security → Screen & System Audio Recording → ZCodeWidget; macOS may ask for Touch ID/password, and the widget should be quit & reopened after granting — note each rebuilt binary needs the grant again)
 - **Menu bar glance** — the Z icon shows today's token usage, turning red when you pass your daily budget (set in Settings); left-click toggles the panel, right-click shows a menu
 - **Activity ticker** — live strip at the bottom showing the latest model calls as they land
 - **Live updates** via FSEvents watcher on `~/.zcode/log/token-tail.jsonl`
@@ -62,7 +63,7 @@ open build/Build/Products/Release/ZCodeWidget.app
 | Action | How |
 |---|---|
 | Toggle panel | Click the **Z** icon in the menu bar (left-click), or run `zcode-widget` |
-| Jump to a section | Click a sidebar item, or press **⌘1…⌘9** (Tokens…Thermal) |
+| Jump to a section | Click a sidebar item, or press **⌘1…⌘9 / ⌘0** (Tokens…Thermal, Captures) |
 | Open menu | Right-click the **Z** icon → Show / Hide / Quit |
 | Hide panel | Click **−** in the footer |
 | Copy slash command | Tap a skill/plugin in its tab |
@@ -72,6 +73,9 @@ open build/Build/Products/Release/ZCodeWidget.app
 | Add a task | **Tasks** tab → **New** → type a title, optionally set a due date/time (reminders go on at the due time) |
 | See due tasks | **Z** icon right-click menu lists tasks due within 24 h; click one to open the Tasks tab |
 | See if the Mac is hot | **Thermal** tab shows live status + heaviest processes; when macOS reports serious/critical pressure a banner names the hot process and the chat that was active, and the sidebar shows a red flame |
+| Take a screenshot | **Captures** tab → **Screen** (whole display the ZCode chat is on) or **Window** (chat window only) |
+| Record the screen | **Captures** tab → **Record**, then **Stop** (or the Z icon's right-click menu); files land in `~/.zcode/captures/` |
+| Send a capture to a chat | **Captures** tab → select a screenshot → **Send to chat** (pick the target chat next to the button) |
 | Move panel | Drag anywhere on the panel (position is remembered) |
 | Resize panel | Drag the **corner grip** (bottom-right, next to the ticker) — minimum 360×480, size is remembered |
 
@@ -91,6 +95,15 @@ A lightweight task list with due-time reminders that live in `~/.zcode/widget-ta
 - **Heaviest processes** — real current CPU% per process (`top -l 2`, two 1-second passes), refreshed every ~16 s; ZCode-related processes get a tag
 - **Heat alerts** — when pressure reaches serious/critical, or the machine sustains *fair* pressure ≥ 24 s under heavy CPU, an event is recorded naming the hot process and the chat session that was active in `~/.zcode/log/token-tail.jsonl` at that moment (session titles come from the ZCode database, read-only). Events persist to `~/.zcode/widget-thermal.json` (last 50); alerts banner only every 10 minutes per episode and notification permission is asked lazily on the first event
 - **Management** — when hot: notification banner (tap → Thermal tab), red flame badge in the sidebar + Z-icon menu entry, and a cool-down card with one-click **Activity Monitor** / **open the hot chat's project** helpers
+
+### The Captures tab
+
+Screenshots & screen recordings you can browse, preview, and send into a live ZCode chat:
+
+- **Capture** — **Screen** photographs the whole display the ZCode chat window is on; **Window** photographs just that window (auto-cropped). **Record** records the display until you press **Stop** — the widget hides its panel first so it never shows up in its own captures, the menu-bar icon shows a red dot while recording, and its right-click menu gains a **⏹ Stop screen recording** item. Recordings are H.264 `.mov` files, silent.
+- **Gallery** — every capture lands in `~/.zcode/captures/` (`shot-<timestamp>.png` / `rec-<timestamp>.mov`) and appears in a thumbnail grid with duration chips on videos; select one to preview it (images full-size, videos play inline) with its date, size and actions: **Copy**, **Reveal** in Finder, **Delete** (to Trash), and **Send to chat**.
+- **Send to chat** — for screenshots only: the button next to a chat picker (newest live chats first) writes the image into that chat's own `session_input` queue in `~/.zcode/cli/db/db.sqlite` — the same channel the ZCode UI itself uses, mirrored field-for-field from a real message. ZCode promotes it within a few seconds; if it doesn't (the mechanism is internal and unverified for outside writers), the widget copies the image instead and says so. Nothing is ever sent automatically — only when you click **Send to chat**. Videos can't be auto-sent; **Copy video** puts the file on your clipboard to attach manually.
+- **Permission** — first use needs macOS Screen Recording permission (Settings → Privacy & Security → Screen & System Audio Recording → ZCodeWidget). The widget explains this on the tab and deep-links to the right pane; macOS may ask for your Touch ID/password, and the widget should be quit & reopened afterwards. Because the widget is ad-hoc signed, a newly built/reinstalled binary needs the grant once more.
 
 ### The Providers tab
 
@@ -170,6 +183,10 @@ zcode-widget/
 │   │   ├── TaskStore.swift          # Task items (~/.zcode/widget-tasks.json)
 │   │   ├── TaskReminderManager.swift # Local notifications + due-task scanner
 │   │   ├── WidgetSettingsStore.swift # Daily budget + pinned folders (~/.zcode/widget-settings.json)
+│   │   ├── ThermalMonitor.swift      # Thermal pressure + CPU sampling, heat alerts
+│   │   ├── CaptureStore.swift        # ~/.zcode/captures library (scan, thumbs, durations)
+│   │   ├── CaptureRecorder.swift     # Screenshot + screen-recording engine (TCC-gated)
+│   │   ├── ChatSender.swift          # Send-to-chat via the session_input queue + clipboard fallback
 │   │   └── ActivityTicker.swift    # Latest-call ticker state
 │   ├── Database/
 │   │   ├── ProjectDbScanner.swift  # Discovers projects + parses SQL → tables/policies/functions/triggers
@@ -178,7 +195,7 @@ zcode-widget/
 │   │   ├── SkillScanner.swift   # Scans ~/.zcode/skills/ for SKILL.md
 │   │   └── PluginScanner.swift  # Reads installed_plugins.json + config.json
 │   ├── UI/
-│   │   ├── ContentView.swift    # Sidebar + section switcher (8 sections)
+│   │   ├── ContentView.swift    # Sidebar + section switcher (10 sections)
 │   │   ├── TokensView.swift     # Stats cards + chart + streak + turn list
 │   │   ├── SkillsView.swift     # Searchable skill picker + copy slash command
 │   │   ├── PluginsView.swift    # Searchable plugin picker + copy slash command
@@ -187,6 +204,8 @@ zcode-widget/
 │   │   ├── PromptsView.swift    # Prompt enhancer + library
 │   │   ├── DatabaseView.swift   # Per-project database dashboard
 │   │   ├── TasksView.swift      # Task list + editor (due dates, priorities)
+│   │   ├── ThermalView.swift    # Heat status, cool-down helpers, alerts history
+│   │   ├── CapturesView.swift   # Capture bar, gallery, previews, send-to-chat
 │   │   ├── SettingsView.swift   # Settings sheet (daily budget)
 │   │   ├── ActivityTickerBar.swift  # Live bottom ticker strip
 │   │   └── ToastView.swift      # Copy-to-clipboard feedback toast
@@ -209,7 +228,7 @@ Note: `started_at` is stored as **INTEGER milliseconds** since Unix epoch (not I
 ## Notes
 
 - The app is a background accessory (`LSUIElement = true`), so it won't appear in the Dock — look for the **Z** icon in the menu bar.
-- All data paths are read from the current user's home directory; the widget never writes anywhere except provider-config edits (with backup) in `~/.zcode/v2/` and its own task file in `~/.zcode/widget-tasks.json`.
+- All data paths are read from the current user's home directory; the widget never writes anywhere except provider-config edits (with backup) in `~/.zcode/v2/`, its own task file in `~/.zcode/widget-tasks.json`, and the captures folder `~/.zcode/captures/` (plus the rare user-clicked **Send to chat** queue insert in `~/.zcode/cli/db/db.sqlite`).
 
 ## License
 

@@ -22,7 +22,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         // 1. Hidden main menu — an accessory app has no menu bar, so without an
         // Edit menu AppKit never delivers Cmd+C/V/X/A/Z to text fields, and the
-        // View menu below powers the ⌘1…⌘8 section shortcuts.
+        // View menu below powers the ⌘1…⌘9 / ⌘0 section shortcuts.
         setupMainMenu()
 
         // 2. Register status bar item FIRST so it survives even if window is closed
@@ -44,13 +44,29 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
         ThermalMonitor.shared.start()
 
-        // 5. Create and show the panel
+        // 5. Captures: screenshots & screen recordings with a send-to-chat
+        // action. The panel hides itself while a still is taken and for the
+        // whole recording, so the widget never shows up in its own captures.
+        CaptureRecorder.shared.setPanelHidden = { [weak self] hidden in
+            self?.setPanelHidden(hidden)
+        }
+        CaptureRecorder.shared.onRecordingChanged = { [weak self] recording in
+            self?.statusView?.recording = recording
+        }
+        CaptureRecorder.shared.onRecordingFinished = { [weak self] url in
+            guard let self else { return }
+            AppState.shared.selectedTab = .captures
+            if url != nil { CaptureStore.shared.rescan() }
+            self.showPanel()
+        }
+
+        // 6. Create and show the panel
         panelController = FloatingPanelController()
         panelController?.showWindow(nil)
         panelController?.window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
 
-        // 6. Menu bar glance — refresh every 30s while the widget runs
+        // 7. Menu bar glance — refresh every 30s while the widget runs
         refreshStatusItem()
         statusTimer = Timer.scheduledTimer(withTimeInterval: 30.0, repeats: true) { [weak self] _ in
             self?.refreshStatusItem()
@@ -86,14 +102,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         editMenu.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
         editMenuItem.submenu = editMenu
 
-        // View menu: ⌘1…⌘9 switch sections (shows the panel if hidden)
+        // View menu: ⌘1…⌘9 / ⌘0 switch sections (shows the panel if hidden).
+        // Key equivalents are single characters, so the 10th tab wraps to "0".
         let viewMenuItem = NSMenuItem()
         mainMenu.addItem(viewMenuItem)
         let viewMenu = NSMenu(title: "View")
         for tab in SidebarTab.allCases {
             let item = NSMenuItem(title: tab.title,
                                   action: #selector(selectTab(_:)),
-                                  keyEquivalent: String(tab.rawValue + 1))
+                                  keyEquivalent: String((tab.rawValue + 1) % 10))
             item.tag = tab.rawValue
             item.target = self
             viewMenu.addItem(item)
@@ -124,6 +141,34 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         Task { @MainActor in
             AppState.shared.selectedTab = .thermal
             showPanel()
+        }
+    }
+
+    /// Opens the panel on the Captures tab.
+    @objc private func openCapturesTab() {
+        Task { @MainActor in
+            AppState.shared.selectedTab = .captures
+            showPanel()
+        }
+    }
+
+    /// Stops an in-flight screen recording (menu-bar context menu).
+    @objc private func stopRecording() {
+        CaptureRecorder.shared.stopRecording()
+    }
+
+    /// Hides/shows the panel around captures; the panel comes back exactly as
+    /// it was, so a hidden widget stays hidden after a background capture.
+    private var wasPanelVisibleBeforeCapture = true
+    private func setPanelHidden(_ hidden: Bool) {
+        guard let window = panelController?.window else { return }
+        if hidden {
+            wasPanelVisibleBeforeCapture = window.isVisible
+            window.orderOut(nil)
+        } else if wasPanelVisibleBeforeCapture {
+            wasPanelVisibleBeforeCapture = true
+            window.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
         }
     }
 
@@ -214,6 +259,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func showContextMenu() {
         let menu = NSMenu()
 
+        // Recording shortcut — stop from the menu bar while the panel is hidden.
+        if CaptureRecorder.shared.isRecording {
+            menu.addItem(NSMenuItem(title: "⏹ Stop screen recording",
+                                    action: #selector(stopRecording),
+                                    keyEquivalent: ""))
+            menu.addItem(NSMenuItem.separator())
+        }
+
         // Machine-hot shortcut — one click to the Thermal tab.
         if ThermalMonitor.shared.isHot {
             menu.addItem(NSMenuItem(title: "🔥 Mac running hot — open Thermal",
@@ -268,16 +321,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
 /// Custom status item view: draws "Z <today's tokens>" with an explicit color
 /// (label / orange / red). A plain NSStatusBarButton ignores title colors, so
-/// the text is drawn directly.
+/// the text is drawn directly. While a screen recording runs, a red dot is
+/// drawn in front of the label.
 private final class StatusItemView: NSView {
     var text = "" { didSet { needsDisplay = true; invalidateIntrinsicContentSize() } }
     var tint: NSColor = .labelColor { didSet { needsDisplay = true } }
+    var recording = false { didSet { needsDisplay = true; invalidateIntrinsicContentSize() } }
     var onLeftClick: (() -> Void)?
     var onRightClick: (() -> Void)?
 
     override var intrinsicContentSize: NSSize {
         let width = ("Z \(text)" as NSString).size(withAttributes: Self.textAttributes).width
-        return NSSize(width: ceil(width) + 14, height: 24)
+        return NSSize(width: ceil(width) + (recording ? 22 : 14), height: 24)
     }
 
     private static let textAttributes: [NSAttributedString.Key: Any] = [
@@ -289,11 +344,15 @@ private final class StatusItemView: NSView {
             .font: NSFont.systemFont(ofSize: 12, weight: .semibold),
             .foregroundColor: tint,
         ]
+        if recording {
+            NSColor.systemRed.setFill()
+            NSBezierPath(ovalIn: NSRect(x: 5, y: bounds.midY - 3.5, width: 7, height: 7)).fill()
+        }
         let string = "Z \(text)" as NSString
         let size = string.size(withAttributes: attrs)
+        let x = recording ? 16 : (bounds.width - size.width) / 2
         string.draw(
-            at: NSPoint(x: (bounds.width - size.width) / 2,
-                        y: (bounds.height - size.height) / 2),
+            at: NSPoint(x: x, y: (bounds.height - size.height) / 2),
             withAttributes: attrs
         )
     }
