@@ -104,13 +104,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         // View menu: ⌘1…⌘9 / ⌘0 switch sections (shows the panel if hidden).
         // Key equivalents are single characters, so the 10th tab wraps to "0".
+        // Tabs beyond ten (rawValue >= 10, e.g. Design) get no shortcut — the
+        // modulo would otherwise collide with ⌘1.
         let viewMenuItem = NSMenuItem()
         mainMenu.addItem(viewMenuItem)
         let viewMenu = NSMenu(title: "View")
         for tab in SidebarTab.allCases {
             let item = NSMenuItem(title: tab.title,
                                   action: #selector(selectTab(_:)),
-                                  keyEquivalent: String((tab.rawValue + 1) % 10))
+                                  keyEquivalent: tab.rawValue < 10 ? String((tab.rawValue + 1) % 10) : "")
             item.tag = tab.rawValue
             item.target = self
             viewMenu.addItem(item)

@@ -2,7 +2,21 @@ import SwiftUI
 import AppKit
 
 enum SidebarTab: Int, CaseIterable, Identifiable {
-    case tokens, skills, plugins, providers, report, prompts, database, tasks, thermal, captures
+    // Explicit raw values: `design` sits between prompts and database in the
+    // sidebar (declaration order drives CaseIterable), but numbered 10 so the
+    // ⌘1–⌘0 shortcut map built from rawValue in ZCodeWidgetApp keeps its
+    // original meaning for the other ten tabs.
+    case tokens = 0
+    case skills = 1
+    case plugins = 2
+    case providers = 3
+    case report = 4
+    case prompts = 5
+    case design = 10
+    case database = 6
+    case tasks = 7
+    case thermal = 8
+    case captures = 9
 
     var id: Int { rawValue }
 
@@ -14,6 +28,7 @@ enum SidebarTab: Int, CaseIterable, Identifiable {
         case .providers: "Providers"
         case .report: "Report"
         case .prompts: "Prompts"
+        case .design: "Design"
         case .database: "Database"
         case .tasks: "Tasks"
         case .thermal: "Thermal"
@@ -29,6 +44,7 @@ enum SidebarTab: Int, CaseIterable, Identifiable {
         case .providers: "server.rack"
         case .report: "square.and.arrow.up"
         case .prompts: "text.quote"
+        case .design: "paintpalette"
         case .database: "cylinder.split.1x2"
         case .tasks: "checklist"
         case .thermal: "thermometer.medium"
@@ -242,6 +258,7 @@ struct ContentView: View {
             case .providers: ProvidersView()
             case .report: ReportView()
             case .prompts: PromptsView()
+            case .design: DesignLibraryView()
             case .database: DatabaseView()
             case .tasks: TasksView()
             case .thermal: ThermalView()

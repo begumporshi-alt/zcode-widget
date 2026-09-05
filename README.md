@@ -6,13 +6,14 @@ A floating macOS dashboard panel for ZCode: token usage stats, searchable skill/
 
 ## Features
 
-- **Floating always-on-top panel** that lives in the macOS menu bar, with a scrollable sidebar (10 sections) — ⌘1…⌘9 / ⌘0 jump straight to a section. Drag the grip in the bottom-right corner to resize (440×560pt default, minimum 360×480); position and size are remembered between launches
+- **Floating always-on-top panel** that lives in the macOS menu bar, with a scrollable sidebar (11 sections) — ⌘1…⌘9 / ⌘0 jump straight to a section (the Design Library tab is click-only). Drag the grip in the bottom-right corner to resize (440×560pt default, minimum 360×480); position and size are remembered between launches
 - **Tokens tab** — token usage stats from `~/.zcode/cli/db/db.sqlite`, 7-day bar chart, usage streak, recent turns list
 - **Skills tab** — searchable picker of `~/.zcode/skills/` with copy-to-clipboard for slash commands
 - **Plugins tab** — searchable picker with copy-to-clipboard
 - **Providers tab** — visual editor for ZCode's custom model providers (`~/.zcode/v2/config.json`): add/edit/delete providers and models, custom headers, and a one-tap fix for gateways that return empty responses
 - **Report tab** — one-tap weekly shareable summary card (copy as 2× PNG) plus a 119-day activity heatmap
 - **Prompts tab** — LLM-powered prompt enhancer (uses your configured ZCode providers) and a prompt library with curated built-ins plus your own saved prompts
+- **Design Library tab** — a searchable library of design directions (seeded with 7 clothing-ecommerce concepts): palettes with click-to-copy hex swatches, typography pairings, imagery/layout guidance, page-by-page application notes, reference sites, and a one-tap **Copy brief as Markdown** export; add your own directions alongside the built-ins
 - **Database tab** — per-project database dashboard: auto-discovers the projects you work on in ZCode, then inventories each project's migrations, tables & columns (with RLS badges), row-level security policies, functions, triggers, connection hints (key names only — values are never read), and architecture/blueprint notes from ZCode memories + in-repo docs
 - **Tasks tab** — personal task manager with reminders: tasks with due dates & times, priorities and notes; macOS notification at the due time (with a **Mark Done** action), due-soon badge on the sidebar and menu-bar tooltip, and quick access to due tasks from the Z icon's right-click menu
 - **Thermal tab** — macOS heat monitor & management: watches the OS's own thermal pressure (raw °C sensors need admin rights on Apple Silicon, so the widget reads `ProcessInfo.thermalState` + live per-process CPU instead), shows the heaviest processes, and records heat alerts that name the hot process **and the ZCode chat that was active** when the machine heated up. When it gets hot: a notification banner (tap → opens the Thermal tab), a red flame badge on the sidebar, an in-widget alerts history (`~/.zcode/widget-thermal.json`), and cool-down helpers (Activity Monitor, open the hot chat's project folder). Detection runs even while the panel is hidden
@@ -63,7 +64,7 @@ open build/Build/Products/Release/ZCodeWidget.app
 | Action | How |
 |---|---|
 | Toggle panel | Click the **Z** icon in the menu bar (left-click), or run `zcode-widget` |
-| Jump to a section | Click a sidebar item, or press **⌘1…⌘9 / ⌘0** (Tokens…Thermal, Captures) |
+| Jump to a section | Click a sidebar item, or press **⌘1…⌘9 / ⌘0** (Tokens…Thermal, Captures — Design Library is click-only) |
 | Open menu | Right-click the **Z** icon → Show / Hide / Quit |
 | Hide panel | Click **−** in the footer |
 | Copy slash command | Tap a skill/plugin in its tab |
@@ -108,6 +109,16 @@ Screenshots & screen recordings you can browse, preview, and send into a live ZC
 - **Gallery** — every capture lands in `~/.zcode/captures/` (`shot-<timestamp>.png` / `rec-<timestamp>.mov`) and appears in a thumbnail grid with duration chips on videos; select one to preview it (images full-size, videos play inline) with its date, size and actions: **Copy**, **Reveal** in Finder, **Delete** (to Trash), and **Send to chat**.
 - **Send to chat** — for screenshots only: the button next to a chat picker (newest live chats first) writes the image into that chat's own `session_input` queue in `~/.zcode/cli/db/db.sqlite` — the same channel the ZCode UI itself uses, mirrored field-for-field from a real message. ZCode promotes it within a few seconds; if it doesn't (the mechanism is internal and unverified for outside writers), the widget copies the image instead and says so. Nothing is ever sent automatically — only when you click **Send to chat**. Videos can't be auto-sent; **Copy video** puts the file on your clipboard to attach manually.
 - **Permission** — first use needs macOS Screen Recording permission (Settings → Privacy & Security → Screen & System Audio Recording → ZCodeWidget). The widget explains this on the tab and deep-links to the right pane; macOS may ask for your Touch ID/password, and the widget should be quit & reopened afterwards. Because the widget is ad-hoc signed, a newly built/reinstalled binary needs the grant once more.
+
+### The Design Library tab
+
+A searchable library of design directions — palette, typography pairing, imagery and layout guidance, page-by-page application notes (home / category / product / checkout), UI details, and reference sites — persisted to `~/.zcode/design-library.json`:
+
+- **7 curated built-ins** — Editorial Minimal, Quiet Luxury, Brutalist Streetwear, Heritage Archive, Performance Tech, Playful DTC, and Romantic Boho: clothing-store ecommerce directions with real palettes and reference brands (COS, Toteme, Everlane · The Row, Khaite, Celine · SSENSE, Palace, END. · Carhartt WIP, RRL, Grailed · Nike, lululemon, Gymshark · Telfar, Ganni, Baggu · Free People, Sézane, Reformation)
+- **Click any color swatch to copy its hex** (a toast confirms); clicking a card opens the full design brief
+- **Copy brief as Markdown** — one tap exports the whole direction as a paste-ready brief for a designer, developer, or ZCode itself
+- **Add your own** — **＋** opens the editor (swatch rows with live color previews, reference rows, all brief fields); built-ins can be **duplicated** to edit, deleted, and re-seeded anytime with the restore (↻) button
+- **Filter** with the tag chips (Minimal / Luxury / Streetwear / Heritage / Performance / Playful / Boho — plus any tags you invent) or search across names, taglines, and typography
 
 ### The Providers tab
 
@@ -184,6 +195,7 @@ zcode-widget/
 │   │   ├── ProviderConfigStore.swift  # Read/write ~/.zcode/v2/config.json (surgical, backups)
 │   │   ├── PromptEnhancer.swift    # LLM enhance calls through configured providers
 │   │   ├── PromptLibraryStore.swift # Prompt library (~/.zcode/prompts.json)
+│   │   ├── DesignLibraryStore.swift # Design directions (~/.zcode/design-library.json)
 │   │   ├── TaskStore.swift          # Task items (~/.zcode/widget-tasks.json)
 │   │   ├── TaskReminderManager.swift # Local notifications + due-task scanner
 │   │   ├── WidgetSettingsStore.swift # Daily budget + pinned folders (~/.zcode/widget-settings.json)
@@ -201,13 +213,15 @@ zcode-widget/
 │   │   ├── SkillScanner.swift   # Scans ~/.zcode/skills/ for SKILL.md
 │   │   └── PluginScanner.swift  # Reads installed_plugins.json + config.json
 │   ├── UI/
-│   │   ├── ContentView.swift    # Sidebar + section switcher (10 sections)
+│   │   ├── ContentView.swift    # Sidebar + section switcher (11 sections)
 │   │   ├── TokensView.swift     # Stats cards + chart + streak + turn list
 │   │   ├── SkillsView.swift     # Searchable skill picker + copy slash command
 │   │   ├── PluginsView.swift    # Searchable plugin picker + copy slash command
 │   │   ├── ProvidersView.swift  # Provider list + editors (provider, model)
 │   │   ├── ReportView.swift     # Weekly shareable card + heatmap
 │   │   ├── PromptsView.swift    # Prompt enhancer + library
+│   │   ├── DesignLibraryView.swift # Design-direction library (briefs, swatches, export)
+│   │   ├── DesignSystem/        # Shared design tokens (Theme) + reusable components
 │   │   ├── DatabaseView.swift   # Per-project database dashboard
 │   │   ├── TasksView.swift      # Task list + editor (due dates, priorities)
 │   │   ├── ThermalView.swift    # Heat status, cool-down helpers, alerts history
